@@ -6,8 +6,18 @@
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
 stages:
-- test
+  - test
+
+unit-tests:
+  stage: test
+  image: node:22
+  script:
+    - npm ci
+    - npm test -- --run
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
 sast:
   stage: test
 include:
-- template: Security/SAST.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
