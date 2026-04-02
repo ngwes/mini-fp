@@ -46,8 +46,10 @@ npm-publish:
   variables:
     NPM_CONFIG_PROVENANCE: "true"
   script:
+    - npm install -g npm@latest
+    - npm --version
     - npm ci
-    - npm run build --if-present
+    - npm run build
     - npm publish
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
