@@ -23,25 +23,11 @@ sast:
 include:
   - template: Security/SAST.gitlab-ci.yml
 
-release-please:
+semantic-release:
   stage: release
   image: node:22
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  variables:
-    RELEASE_PLEASE_TOKEN: $RELEASE_PLEASE_TOKEN
   script:
-    - npx release-please release-pr
-        --token=$RELEASE_PLEASE_TOKEN
-        --repo-url=$CI_PROJECT_URL
-        --release-type=node
-        --target-branch=$CI_DEFAULT_BRANCH
-        --api-url=https://gitlab.com/api/v4
-        --graphql-url=https://gitlab.com/api/graphql
-    - npx release-please github-release
-        --token=$RELEASE_PLEASE_TOKEN
-        --repo-url=$CI_PROJECT_URL
-        --release-type=node
-        --target-branch=$CI_DEFAULT_BRANCH
-        --api-url=https://gitlab.com/api/v4
-        --graphql-url=https://gitlab.com/api/graphql
+    - npm ci
+    - npx semantic-release
