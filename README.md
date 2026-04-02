@@ -1107,11 +1107,11 @@ npm run test:watch
 npm run build
 ```
 
-# Thanks
+## Thanks
 
-A special thanks to Franco, which has developed [Tiny-FP](https://github.com/FrancoMelandri/tiny-fp), from which this repository borrows its name and that has let me get in touch with functional programming for the first time.
+A special thanks to Franco, who developed [Tiny-FP](https://github.com/FrancoMelandri/tiny-fp), from which this repository borrows its name and through which I was introduced to functional programming for the first time.
 
-If you're interested in functional programming and Railway-oriented programming as well, here are two resources, even if for C#, that are the same first two I have used to start studying this paradigms.
+If you're interested in functional programming and Railway-oriented programming, here are the first two resources I used when studying these paradigms — written for C#, but the concepts translate directly.
 
 [Functional Programming in C#, by Enrico Buonanno](https://www.manning.com/books/functional-programming-in-c-sharp)
 
