@@ -8,14 +8,18 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:debug": "vitest run --inspect --no-file-parallelism"
+    "test:debug": "vitest run --inspect --no-file-parallelism",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@types/node": "^25.5.0",
+    "husky": "^9.1.7",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
