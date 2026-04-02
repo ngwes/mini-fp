@@ -1,3 +1,10 @@
+## [1.0.4](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.3...v1.0.4) (2026-04-02)
+
+
+### Bug Fixes
+
+* add readme to the distribution folder ([1da4f78](https://gitlab.com/nadir.gherbi1/mini-fp/commit/1da4f78933a1e5b3e1863748353d9e3363771c68))
+
 ## [1.0.3](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.2...v1.0.3) (2026-04-02)
 
 
