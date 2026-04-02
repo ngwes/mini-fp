@@ -35,7 +35,7 @@ semantic-release:
 
 npm-publish:
   stage: publish
-  image: node:22
+  image: node:22.14
   needs: []
   when: manual
   id_tokens:
