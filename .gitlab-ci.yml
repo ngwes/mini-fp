@@ -8,6 +8,7 @@
 stages:
   - test
   - release
+  - publish
 
 unit-tests:
   stage: test
@@ -31,3 +32,12 @@ semantic-release:
   script:
     - npm ci
     - npx semantic-release
+
+npm-publish:
+  stage: publish
+  image: node:22
+  when: manual
+  script:
+    - npm ci
+    - npm run build
+    - npm publish
