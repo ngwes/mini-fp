@@ -1,3 +1,38 @@
+export class OptionAsync<T> implements PromiseLike<Option<T>> {
+    private constructor(private readonly promise: Promise<Option<T>>) {}
+
+    static from<T>(promise: Promise<Option<T>>): OptionAsync<T> {
+        return new OptionAsync(promise);
+    }
+
+    bindAsync<U>(fn: (value: T) => Promise<Option<U>>): OptionAsync<U>;
+    bindAsync<U>(promise: Promise<Option<U>>): OptionAsync<U>;
+    bindAsync<U>(
+        fnOrPromise: ((value: T) => Promise<Option<U>>) | Promise<Option<U>>,
+    ): OptionAsync<U> {
+        if (fnOrPromise instanceof Promise) {
+            return new OptionAsync<U>(
+                this.promise.then(o =>
+                    o.isNone() ? Promise.resolve(Option.none<U>()) : fnOrPromise,
+                ),
+            );
+        }
+        return new OptionAsync<U>(
+            this.promise.then(o => {
+                if (o.isSome()) return fnOrPromise(o.unwrap());
+                return Promise.resolve(Option.none<U>());
+            }),
+        );
+    }
+
+    then<TResult1 = Option<T>, TResult2 = never>(
+        onfulfilled?: ((value: Option<T>) => TResult1 | PromiseLike<TResult1>) | null | undefined,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null | undefined,
+    ): PromiseLike<TResult1 | TResult2> {
+        return this.promise.then(onfulfilled, onrejected);
+    }
+}
+
 export class Option<T>{
 
     private constructor(private readonly value: T | null | undefined){}
@@ -52,8 +87,17 @@ export class Option<T>{
         return this.isSome()? fn(this.value!): Option.none<U>();
     }
 
-    async bindAsync<U>(fn: (value: T) => Promise<Option<U>>) : Promise<Option<U>>{
-        return this.isSome()? await fn(this.value!): Option.none<U>();
+    bindAsync<U>(fn: (value: T) => Promise<Option<U>>): OptionAsync<U>;
+    bindAsync<U>(promise: Promise<Option<U>>): OptionAsync<U>;
+    bindAsync<U>(
+        fnOrPromise: ((value: T) => Promise<Option<U>>) | Promise<Option<U>>,
+    ): OptionAsync<U> {
+        if (fnOrPromise instanceof Promise) {
+            if (this.isNone()) return OptionAsync.from(Promise.resolve(Option.none<U>()));
+            return OptionAsync.from(fnOrPromise);
+        }
+        if (this.isSome()) return OptionAsync.from(fnOrPromise(this.value!));
+        return OptionAsync.from(Promise.resolve(Option.none<U>()));
     }
 
     match<U>(onSome: (value: T) => U,

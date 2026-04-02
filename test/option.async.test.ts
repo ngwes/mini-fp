@@ -50,4 +50,47 @@ describe("Option", () => {
     it("Runs orElse with a value correctly", async() => {
         expect((await none<number>().orElseAsync(Promise.resolve(4)))).toEqual(4);
     });
+
+    it("chains bindAsync on Some without .then()", async () => {
+        expect((await
+            Some<number>(2)
+                .bindAsync(x => FromAsync(Promise.resolve(x * 2)))
+                .bindAsync(x => FromAsync(Promise.resolve(x + 1))))
+            .unwrap(),
+        ).toEqual(5);
+    });
+
+    it("chains bindAsync short-circuits on None without .then()", async () => {
+        expect((await
+            none<number>()
+                .bindAsync(x => FromAsync(Promise.resolve(x * 2)))
+                .bindAsync(x => FromAsync(Promise.resolve(x + 1))))
+            .isNone(),
+        ).toEqual(true);
+    });
+
+    it("bindAsync accepts a Promise overload on Some", async () => {
+        expect((await
+            Some<number>(2)
+                .bindAsync(FromAsync(Promise.resolve(42))))
+            .unwrap(),
+        ).toEqual(42);
+    });
+
+    it("bindAsync accepts a Promise overload and short-circuits on None", async () => {
+        expect((await
+            none<number>()
+                .bindAsync(FromAsync(Promise.resolve(42))))
+            .isNone(),
+        ).toEqual(true);
+    });
+
+    it("OptionAsync.bindAsync accepts a Promise overload on Some", async () => {
+        expect((await
+            Some<number>(2)
+                .bindAsync(x => FromAsync(Promise.resolve(x * 2)))
+                .bindAsync(FromAsync(Promise.resolve(99))))
+            .unwrap(),
+        ).toEqual(99);
+    });
 });
