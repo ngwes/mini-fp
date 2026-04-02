@@ -31,11 +31,17 @@ release-please:
   variables:
     RELEASE_PLEASE_TOKEN: $RELEASE_PLEASE_TOKEN
   script:
-    - npx release-please manifest-pr
+    - npx release-please release-pr
         --token=$RELEASE_PLEASE_TOKEN
         --repo-url=$CI_PROJECT_URL
+        --release-type=node
         --target-branch=$CI_DEFAULT_BRANCH
-    - npx release-please manifest-release
+        --api-url=https://gitlab.com/api/v4
+        --graphql-url=https://gitlab.com/api/graphql
+    - npx release-please github-release
         --token=$RELEASE_PLEASE_TOKEN
         --repo-url=$CI_PROJECT_URL
+        --release-type=node
         --target-branch=$CI_DEFAULT_BRANCH
+        --api-url=https://gitlab.com/api/v4
+        --graphql-url=https://gitlab.com/api/graphql
