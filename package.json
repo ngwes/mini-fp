@@ -1,5 +1,5 @@
 {
-  "name": "mini-fp",
+  "name": "@ngwes/mini-fp",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
