@@ -6,6 +6,21 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 
 ---
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Option\<T\>](#optiont)
+- [Either\<L, R\>](#eitherl-r)
+- [Try\<T\>](#tryt)
+- [Validate\<L, R\>](#validatel-r)
+- [Unit](#unit)
+- [Traversal Utilities](#traversal-utilities)
+- [Real-World Recipes](#real-world-recipes)
+- [API Reference](#api-reference)
+
+---
+
 ## Installation
 
 ```bash
@@ -14,156 +29,1023 @@ npm install mini-fp
 
 ---
 
+## Quick Start
+
+```typescript
+import { Option, Either, Try, Validate, traverseOption } from 'mini-fp';
+
+const { some, none, from } = Option;
+const { left, right } = Either;
+const { run } = Try;
+const { valid, invalid } = Validate;
+```
+
+Each type is a plain class with static constructors. You can call static methods directly (`Option.some(42)`) or destructure them for a terser style (`const { some } = Option`).
+
+---
+
 ## Option\<T\>
 
-`Option<T>` represents a value that may or may not exist. It is either `Some<T>` (a value is present) or `None` (no value).
+`Option<T>` represents a value that may or may not be present. It is either `some(value)` (a value exists) or `none()` (nothing). Use it instead of returning `null` or `undefined`.
 
-### Import
+### Constructors
 
 ```typescript
 import { Option } from 'mini-fp';
-const { Option: O } = Option;
-// or destructure constructors directly:
-const { Some, None, From } = Option.Option;
+const { some, none, from } = Option;
+
+// some: wraps a non-null value (throws if null/undefined is passed)
+const a = some(42);           // Option<number>
+
+// none: represents the absence of a value
+const b = none<number>();     // Option<number>
+
+// from: safe constructor — converts null/undefined to none, anything else to some
+const c = from(null);         // none
+const d = from(undefined);    // none
+const e = from("hello");      // some("hello")
+
+// FromAsync: awaits a Promise, then applies from
+const f = await Option.FromAsync(fetchUserOrNull(id)); // Promise<Option<User>>
 ```
 
-### Creating an Option
+### Checking the state
 
 ```typescript
-// Some: wraps a value (throws if null/undefined)
-const a = Some(42);          // Option<number> — Some(42)
-
-// None: represents absence of a value
-const b = None<number>();    // Option<number> — None
-
-// From: safe constructor, converts null/undefined to None
-const c = From(null);        // None
-const d = From("hello");     // Some("hello")
-
-// FromAsync: wraps a Promise, converts null/undefined resolve to None
-const e = await Option.Option.FromAsync(fetch('/api/user').then(r => r.json()));
+some(1).isSome();  // true
+some(1).isNone();  // false
+none().isSome();   // false
+none().isNone();   // true
 ```
 
-### Transforming values
+### Transforming: `map`
 
-#### `map` — apply a function to the inner value
+`map` applies a function to the inner value if present, leaving `none` untouched.
 
 ```typescript
-Some(2).map(x => x * 3);       // Some(6)
-None<number>().map(x => x * 3); // None
+some(5).map(x => x * 2);         // some(10)
+none<number>().map(x => x * 2);  // none
+
+// Chaining
+some("  hello  ")
+  .map(s => s.trim())
+  .map(s => s.toUpperCase());    // some("HELLO")
 ```
 
-#### `bind` — chain operations that return Option
+### Chaining: `bind`
+
+`bind` (also called `flatMap`) is for operations that themselves return an `Option`. It prevents nesting (`Option<Option<T>>`).
 
 ```typescript
-const parsePositive = (n: number) => n > 0 ? Some(n) : None<number>();
+const parsePositive = (n: number): Option<number> =>
+  n > 0 ? some(n) : none();
 
-Some(5).bind(parsePositive);    // Some(5)
-Some(-1).bind(parsePositive);   // None
-None<number>().bind(parsePositive); // None
+some(5).bind(parsePositive);     // some(5)
+some(-1).bind(parsePositive);    // none
+none<number>().bind(parsePositive); // none
+
+// Real example: safe dictionary lookup
+const users = new Map([["alice", { age: 30 }]]);
+const lookup = (name: string): Option<{ age: number }> => from(users.get(name));
+
+from("alice")
+  .bind(lookup)
+  .map(u => u.age);  // some(30)
+
+from("bob")
+  .bind(lookup)
+  .map(u => u.age);  // none
 ```
 
-### Pattern matching
+### Pattern matching: `match`
+
+`match` forces you to handle both cases explicitly, eliminating the need for null checks.
 
 ```typescript
-const result = Some(42).match(
-    value => `Got ${value}`,
-    ()    => "Nothing here"
+const greeting = some("Alice").match(
+  name => `Hello, ${name}!`,
+  ()   => "Hello, stranger!"
 );
-// "Got 42"
+// "Hello, Alice!"
 
-const fallback = None<number>().match(
-    value => value * 2,
-    ()    => 0
+const fallback = none<string>().match(
+  name => `Hello, ${name}!`,
+  ()   => "Hello, stranger!"
 );
-// 0
+// "Hello, stranger!"
 ```
 
-### Fallback values
+### Fallback values: `orElse`
 
 ```typescript
-// With a default value
-Some(1).orElse(99);       // 1
-None<number>().orElse(99); // 99
+// With a plain value
+some(1).orElse(99);        // 1
+none<number>().orElse(99); // 99
 
-// With a factory function
-None<number>().orElse(() => computeDefault()); // computeDefault()
+// With a factory function (lazy — only called when none)
+none<string>().orElse(() => computeExpensiveDefault()); // result of factory
+
+// Common pattern: provide a default user
+const user = from(sessionUser).orElse(guestUser);
+```
+
+### Unwrapping
+
+Only unwrap when you have already confirmed the option is `some`:
+
+```typescript
+const opt = from(maybeValue);
+
+if (opt.isSome()) {
+  console.log(opt.unwrap()); // safe
+}
+
+// Unsafe — throws if none:
+some(42).unwrap();   // 42
+none().unwrap();     // throws Error
+```
+
+### Async API
+
+Every operation has an `Async` counterpart:
+
+```typescript
+import { Option } from 'mini-fp';
+
+// FromAsync: wraps a nullable Promise
+const user = await Option.FromAsync(db.findUser(id)); // Promise<Option<User>>
+
+// mapAsync
+const upper = await from("hello").mapAsync(async s => s.toUpperCase());
+// some("HELLO")
+
+// bindAsync
+const profile = await from(userId).bindAsync(async id => {
+  const row = await db.query("SELECT * FROM profiles WHERE id = ?", [id]);
+  return from(row ?? null); // none if not found
+});
+
+// matchAsync
+const response = await from(user).matchAsync(
+  async u  => ({ status: 200, body: u }),
+  async () => ({ status: 404, body: "Not found" })
+);
+
+// orElseAsync
+const config = await from(process.env.API_URL).orElseAsync(async () => {
+  const val = await remoteConfigService.get("API_URL");
+  return val;
+});
+```
+
+### Worked example: safe navigation through nested objects
+
+```typescript
+type Address = { city: string; zip: string };
+type User    = { name: string; address: Address | null };
+
+const getCity = (userId: string): Option<string> => {
+  const user: User | null = userRepository.findById(userId);
+
+  return from(user)
+    .bind(u  => from(u.address))
+    .map(a   => a.city);
+};
+
+getCity("u1").orElse("Unknown city");
+```
+
+---
+
+## Either\<L, R\>
+
+`Either<L, R>` represents a computation that can succeed with a `right` value or fail with a `left` value. By convention, `Left` carries the error and `Right` carries the success. Use it when you need to propagate structured error information alongside success values.
+
+### Constructors
+
+```typescript
+import { Either } from 'mini-fp';
+const { left, right } = Either;
+
+const ok  = right<string, number>(42);          // Either<string, number>
+const err = left<string, number>("not found");   // Either<string, number>
+```
+
+### Checking the state
+
+```typescript
+right(1).isRight(); // true
+right(1).isLeft();  // false
+left("e").isLeft(); // true
+```
+
+### Transforming: `map` and `mapLeft`
+
+```typescript
+// map transforms the right (success) side
+right<string, number>(10).map(n => n * 2);  // right(20)
+left<string, number>("err").map(n => n * 2); // left("err") — untouched
+
+// mapLeft transforms the left (error) side
+left<string, number>("not_found").mapLeft(code => ({ code, label: "Not Found" }));
+// left({ code: "not_found", label: "Not Found" })
+```
+
+### Chaining: `bind` and `bindLeft`
+
+```typescript
+const parseAge = (s: string): Either<string, number> => {
+  const n = parseInt(s, 10);
+  return isNaN(n) ? left("invalid number") : right(n);
+};
+
+const validateAge = (n: number): Either<string, number> =>
+  n >= 0 && n <= 150 ? right(n) : left("age out of range");
+
+// Pipeline — each step only runs if the previous succeeded
+right<string, string>("25")
+  .bind(parseAge)
+  .bind(validateAge);  // right(25)
+
+right<string, string>("abc")
+  .bind(parseAge)
+  .bind(validateAge);  // left("invalid number")
+
+right<string, string>("200")
+  .bind(parseAge)
+  .bind(validateAge);  // left("age out of range")
+```
+
+### Pattern matching: `match`
+
+```typescript
+const message = right<string, number>(42).match(
+  value => `Success: ${value}`,
+  error => `Error: ${error}`
+);
+// "Success: 42"
+
+const httpStatus = left<string, number>("unauthorized").match(
+  _     => 200,
+  code  => code === "unauthorized" ? 401 : 400
+);
+// 401
 ```
 
 ### Unwrapping
 
 ```typescript
-Some(42).Unwrap();        // 42
-None<number>().Unwrap();  // throws Error
+right(5).unwrapRight(); // 5
+left("oops").unwrapLeft(); // "oops"
+
+right(5).unwrapLeft();  // throws
+left("oops").unwrapRight(); // throws
 ```
 
-Use `isSome()` / `isNone()` to guard before unwrapping:
+### Async API
 
 ```typescript
-const opt = From(maybeValue);
-if (opt.isSome()) {
-    console.log(opt.Unwrap());
-}
+// mapAsync / mapLeftAsync
+const result = await right<string, string>("hello")
+  .mapAsync(async s => s.toUpperCase()); // right("HELLO")
+
+// bindAsync
+const user = await right<ApiError, string>("user-123")
+  .bindAsync(async id => {
+    const row = await db.users.findById(id);
+    return row ? right(row) : left({ code: "NOT_FOUND", message: "User not found" });
+  });
+
+// matchAsync
+const response = await result.matchAsync(
+  async value => ({ status: 200, data: value }),
+  async error => ({ status: 500, data: error })
+);
+```
+
+### Worked example: HTTP request handler pipeline
+
+```typescript
+type ApiError = { code: string; message: string };
+type User     = { id: string; email: string; role: string };
+
+const authenticate = (token: string): Either<ApiError, string> =>
+  token === "valid"
+    ? right("user-123")
+    : left({ code: "UNAUTHORIZED", message: "Invalid token" });
+
+const fetchUser = async (id: string): Promise<Either<ApiError, User>> => {
+  const user = await db.users.findById(id);
+  return user
+    ? right(user)
+    : left({ code: "NOT_FOUND", message: "User not found" });
+};
+
+const requireAdmin = (user: User): Either<ApiError, User> =>
+  user.role === "admin"
+    ? right(user)
+    : left({ code: "FORBIDDEN", message: "Admin access required" });
+
+// Compose the pipeline
+const handleRequest = async (token: string): Promise<Either<ApiError, User>> =>
+  authenticate(token)
+    .bindAsync(id => fetchUser(id))
+    .then(e => e.bind(requireAdmin));
+
+const result = await handleRequest("valid");
+
+result.match(
+  admin => console.log(`Welcome, admin ${admin.email}`),
+  err   => console.error(`${err.code}: ${err.message}`)
+);
 ```
 
 ---
 
-## Async API
+## Try\<T\>
 
-Every operation has an async counterpart that works with `Promise`s.
+`Try<T>` wraps a computation that might throw an exception. It captures the exception instead of letting it propagate, giving you a controlled way to handle failures — especially when calling third-party code you don't control.
+
+### Constructors
 
 ```typescript
-// FromAsync
-const opt = await Option.Option.FromAsync(asyncGetUser(id));
+import { Try } from 'mini-fp';
+const { run, runAsync } = Try;
 
-// mapAsync
-const upper = await From("hello").mapAsync(async s => s.toUpperCase());
-// Some("HELLO")
+// run: executes a synchronous function, catches any throw
+const result = Try.run(() => JSON.parse(rawInput));
 
-// bindAsync
-const user = await From(userId).bindAsync(async id => {
-    const u = await db.findUser(id);
-    return From(u); // None if not found
+// runAsync: executes an async function, catches any throw or rejection
+const asyncResult = await Try.runAsync(() => fetch(url).then(r => r.json()));
+```
+
+### Checking the state
+
+```typescript
+Try.run(() => 42).isSuccess();            // true
+Try.run(() => { throw new Error() }).isFailure(); // true
+```
+
+### Handling failures: `onFail` and `onFailAsync`
+
+`onFail` is the primary recovery method. It returns the success value directly, or calls your handler with the error:
+
+```typescript
+// Returns 42 on success
+Try.run(() => 42).onFail(_err => 0);  // 42
+
+// Calls the handler on failure
+Try.run(() => { throw new Error("oops") })
+  .onFail(err => {
+    console.error(err);
+    return -1;
+  });
+// -1
+
+// Async recovery
+const data = await Try.runAsync(() => fetchRemote())
+  .then(t => t.onFailAsync(async err => {
+    await logError(err);
+    return fallbackData;
+  }));
+```
+
+### Worked example: safe JSON parsing
+
+```typescript
+type Config = { apiUrl: string; timeout: number };
+
+const parseConfig = (raw: string): Config => {
+  return Try.run<Config>(() => JSON.parse(raw))
+    .onFail(_err => ({ apiUrl: "http://localhost", timeout: 5000 }));
+};
+
+parseConfig('{"apiUrl":"https://api.example.com","timeout":3000}');
+// { apiUrl: "https://api.example.com", timeout: 3000 }
+
+parseConfig("not valid json {{");
+// { apiUrl: "http://localhost", timeout: 5000 }  ← default
+```
+
+### Worked example: wrapping unreliable third-party code
+
+```typescript
+import { Try } from 'mini-fp';
+
+const readConfigFile = async (path: string): Promise<string> => {
+  const result = await Try.runAsync(() => fs.promises.readFile(path, "utf-8"));
+  return result.onFail(err => {
+    console.warn(`Could not read ${path}:`, err);
+    return "{}";
+  });
+};
+```
+
+### Worked example: converting exceptions to Either
+
+```typescript
+import { Try, Either } from 'mini-fp';
+const { left, right } = Either;
+
+const tryToEither = <T>(fn: () => T): Either<Error, T> => {
+  const t = Try.run(fn);
+  return t.isSuccess()
+    ? right(t.onFail(() => null as never))
+    : left(t.onFail(e => e as Error) as unknown as Error);
+};
+```
+
+---
+
+## Validate\<L, R\>
+
+`Validate<L, R>` is designed for validation scenarios where you want to collect **all** errors rather than short-circuiting on the first one. Unlike `Either`, combining two invalid `Validate` instances accumulates their errors.
+
+- `valid(value)` — the value passed all validations
+- `invalid(errors)` — one or more validation rules failed (errors is an array)
+
+### Constructors
+
+```typescript
+import { Validate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+const ok  = valid<string, number>(42);       // Validate<string, number>
+const err = invalid<string, number>(["must be positive"]); // Validate<string, number>
+```
+
+### Transforming and chaining
+
+```typescript
+// map — transform the valid value
+valid<string, number>(5).map(x => x * 2).unwrap();  // 10
+invalid<string, number>(["err"]).map(x => x * 2);   // still invalid(["err"])
+
+// bind — chain a validation that itself returns a Validate
+valid<string, number>(10)
+  .bind(n => n > 0 ? valid(n) : invalid(["must be positive"]));
+// valid(10)
+```
+
+### Combining: `combine` and `combineAsync`
+
+This is the key feature of `Validate`. When both sides are invalid, **all errors are merged**:
+
+```typescript
+// Both valid → keeps first value
+valid<string, number>(1).combine(valid(2)).unwrap(); // 1
+
+// One invalid → collects all errors
+valid<string, number>(10).combine(invalid(["too large"]));
+// invalid(["too large"])
+
+// Both invalid → accumulates errors
+invalid<string, number>(["required"])
+  .combine(invalid(["must be a number", "must be positive"]));
+// invalid(["required", "must be a number", "must be positive"])
+
+// Async combine
+const r = await valid<string, number>(5)
+  .combineAsync(Promise.resolve(invalid<string, number>(["async error"])));
+// invalid(["async error"])
+```
+
+### Unwrapping
+
+```typescript
+valid(42).unwrap();               // 42
+valid(42).unwrapInvalid();        // throws
+
+invalid(["oops"]).unwrapInvalid(); // ["oops"]
+invalid(["oops"]).unwrap();       // throws
+```
+
+### Worked example: form field validation
+
+```typescript
+import { Validate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+type FieldError = { field: string; message: string };
+
+const validateName = (name: string): Validate<FieldError, string> =>
+  name.trim().length > 0
+    ? valid(name.trim())
+    : invalid([{ field: "name", message: "Name is required" }]);
+
+const validateEmail = (email: string): Validate<FieldError, string> => {
+  if (!email.includes("@"))
+    return invalid([{ field: "email", message: "Invalid email address" }]);
+  if (email.length > 254)
+    return invalid([{ field: "email", message: "Email too long" }]);
+  return valid(email);
+};
+
+const validateAge = (age: number): Validate<FieldError, number> => {
+  const errors: FieldError[] = [];
+  if (age < 0)   errors.push({ field: "age", message: "Age cannot be negative" });
+  if (age > 150) errors.push({ field: "age", message: "Age is unrealistic" });
+  return errors.length > 0 ? invalid(errors) : valid(age);
+};
+
+// Run all validations and collect every error
+const result = validateName("")
+  .combine(validateEmail("not-an-email"))
+  .combine(validateAge(-5));
+
+if (result.isInvalid()) {
+  result.unwrapInvalid().forEach(e =>
+    console.error(`[${e.field}] ${e.message}`)
+  );
+}
+// [name] Name is required
+// [email] Invalid email address
+// [age] Age cannot be negative
+```
+
+### Worked example: validating a DTO before persistence
+
+```typescript
+import { Validate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+interface CreateUserDto { username: string; password: string; email: string }
+type ValidationError = string;
+
+const validateUsername = (s: string): Validate<ValidationError, string> => {
+  if (s.length < 3)  return invalid(["username: min 3 characters"]);
+  if (s.length > 20) return invalid(["username: max 20 characters"]);
+  if (!/^[a-z0-9_]+$/.test(s)) return invalid(["username: only lowercase letters, digits and underscores"]);
+  return valid(s);
+};
+
+const validatePassword = (s: string): Validate<ValidationError, string> => {
+  const errors: string[] = [];
+  if (s.length < 8)        errors.push("password: min 8 characters");
+  if (!/[A-Z]/.test(s))    errors.push("password: needs an uppercase letter");
+  if (!/[0-9]/.test(s))    errors.push("password: needs a digit");
+  return errors.length ? invalid(errors) : valid(s);
+};
+
+const validateDto = (dto: CreateUserDto): Validate<ValidationError, CreateUserDto> =>
+  validateUsername(dto.username)
+    .combine(validatePassword(dto.password))
+    .map(() => dto);  // if all valid, return the original DTO
+
+const result = validateDto({
+  username: "ab",
+  password: "weakpass",
+  email: "user@example.com"
 });
 
-// matchAsync
-const label = await opt.matchAsync(
-    async user => `Welcome, ${user.name}`,
-    async ()   => "Guest"
+result.match(
+  dto    => saveUser(dto),
+  errors => res.status(400).json({ errors })
 );
+```
 
-// orElseAsync
-const value = await None<User>().orElseAsync(async () => guestUser());
+---
+
+## Unit
+
+`Unit` represents the absence of a meaningful return value — the functional equivalent of `void`. It avoids polluting your types with `void` in generic contexts.
+
+```typescript
+import { Unit } from 'mini-fp';
+
+// Use when an operation succeeds but has nothing to return
+const performSideEffect = (): Either<string, Unit> => {
+  try {
+    doSomething();
+    return Either.right(Unit.default);
+  } catch {
+    return Either.left("operation failed");
+  }
+};
+
+performSideEffect().match(
+  _unit => console.log("done"),
+  err   => console.error(err)
+);
+```
+
+---
+
+## Traversal Utilities
+
+Traversal functions flip a collection of monadic values into a single monad containing a collection. All traversals are fail-fast (returning `none`/`left`) except `sequenceValidate`, which accumulates.
+
+### `traverseOption`
+
+Converts `Option<T>[]` → `Option<T[]>`. Returns `none` as soon as any element is `none`.
+
+```typescript
+import { Option, traverseOption } from 'mini-fp';
+const { some, none, from } = Option;
+
+traverseOption([some(1), some(2), some(3)]); // some([1, 2, 3])
+traverseOption([some(1), none(),  some(3)]); // none  ← short-circuits
+traverseOption([]);                          // some([])
+
+// Practical use: look up several keys that must all exist
+const getRequiredEnvVars = (keys: string[]): Option<string[]> =>
+  traverseOption(keys.map(k => from(process.env[k])));
+
+getRequiredEnvVars(["DB_HOST", "DB_PORT", "API_KEY"]);
+// none if any variable is missing, some([...values]) if all present
+```
+
+### `traverseOptionAsync`
+
+Converts `Option<Promise<T>>[]` → `Promise<Option<T[]>>`. Awaits all inner promises.
+
+```typescript
+import { Option, traverseOptionAsync } from 'mini-fp';
+const { some, none } = Option;
+
+const results = await traverseOptionAsync([
+  some(Promise.resolve(1)),
+  some(Promise.resolve(2)),
+]);
+// some([1, 2])
+
+const withMissing = await traverseOptionAsync([
+  some(Promise.resolve(1)),
+  none<Promise<number>>(),
+]);
+// none
+```
+
+### `traverseEither`
+
+Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered.
+
+```typescript
+import { Either, traverseEither } from 'mini-fp';
+const { left, right } = Either;
+
+traverseEither([right(1), right(2), right(3)]); // right([1, 2, 3])
+traverseEither([right(1), left("oops"), right(3)]); // left("oops")
+
+// Practical use: parse a batch of inputs
+const parseAll = (inputs: string[]): Either<string, number[]> =>
+  traverseEither(
+    inputs.map(s => {
+      const n = Number(s);
+      return isNaN(n) ? Either.left(`"${s}" is not a number`) : Either.right(n);
+    })
+  );
+
+parseAll(["1", "2", "3"]); // right([1, 2, 3])
+parseAll(["1", "abc", "3"]); // left('"abc" is not a number')
+```
+
+### `traverseEitherAsync`
+
+Converts `Either<L, Promise<R>>[]` → `Promise<Either<L, R[]>>`.
+
+```typescript
+import { Either, traverseEitherAsync } from 'mini-fp';
+const { left, right } = Either;
+
+const results = await traverseEitherAsync([
+  right(Promise.resolve(10)),
+  right(Promise.resolve(20)),
+]);
+// right([10, 20])
+
+const withError = await traverseEitherAsync([
+  right(Promise.resolve(10)),
+  left("fetch failed"),
+]);
+// left("fetch failed")
+```
+
+### `sequenceValidate`
+
+Converts `Validate<L, R>[]` → `Validate<L, R[]>`. Unlike `traverseEither`, it **does not short-circuit** — all validations run and all errors are collected.
+
+```typescript
+import { Validate, sequenceValidate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+// All valid
+sequenceValidate([valid(1), valid(2), valid(3)]).unwrap();
+// [1, 2, 3]
+
+// Collects all errors — not just the first
+sequenceValidate([
+  invalid(["e1"]),
+  valid(5),
+  invalid(["e2", "e3"]),
+]).unwrapInvalid();
+// ["e1", "e2", "e3"]
+
+// Practical: validate every item in an array
+const validatePositive = (n: number): Validate<string, number> =>
+  n > 0 ? valid(n) : invalid([`${n} is not positive`]);
+
+sequenceValidate([-1, 2, -3, 4].map(validatePositive));
+// invalid(["-1 is not positive", "-3 is not positive"])
+```
+
+### `sequenceValidateAsync`
+
+```typescript
+import { sequenceValidateAsync, Validate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+const result = await sequenceValidateAsync(
+  Promise.resolve([
+    valid<string, number>(1),
+    invalid<string, number>(["async error"]),
+    valid<string, number>(3),
+  ])
+);
+// invalid(["async error"])
+```
+
+---
+
+## Real-World Recipes
+
+### Recipe 1: Config loading with fallbacks
+
+Load config from environment, fall back to file, fall back to defaults.
+
+```typescript
+import { Option } from 'mini-fp';
+const { from } = Option;
+
+interface AppConfig { dbUrl: string; port: number; logLevel: string }
+
+const fromEnv = (): Option<AppConfig> => {
+  const dbUrl    = process.env.DATABASE_URL;
+  const port     = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+  const logLevel = process.env.LOG_LEVEL;
+
+  return from(dbUrl)
+    .bind(db => from(port).map(p => ({ dbUrl: db, port: p })))
+    .bind(partial => from(logLevel).map(l => ({ ...partial, logLevel: l })));
+};
+
+const fromFile = async (): Promise<Option<AppConfig>> => {
+  const text = await Option.FromAsync(
+    import("fs/promises").then(fs =>
+      fs.readFile("config.json", "utf-8").catch(() => null)
+    )
+  );
+  return text.bind(t => {
+    try { return Option.from<AppConfig>(JSON.parse(t)); }
+    catch { return Option.none(); }
+  });
+};
+
+const defaults: AppConfig = { dbUrl: "postgres://localhost/dev", port: 3000, logLevel: "info" };
+
+const loadConfig = async (): Promise<AppConfig> => {
+  const envConfig = fromEnv();
+  if (envConfig.isSome()) return envConfig.unwrap();
+
+  const fileConfig = await fromFile();
+  return fileConfig.orElse(defaults);
+};
+```
+
+### Recipe 2: User registration pipeline
+
+Validate input, check for duplicates, hash the password, persist — each step can fail with a typed error.
+
+```typescript
+import { Either, Try } from 'mini-fp';
+const { left, right } = Either;
+
+type RegistrationError =
+  | { type: "VALIDATION";  field: string; message: string }
+  | { type: "CONFLICT";    message: string }
+  | { type: "PERSISTENCE"; message: string };
+
+interface RegisterDto  { email: string; password: string }
+interface User         { id: string; email: string; passwordHash: string }
+
+const validateEmail = (email: string): Either<RegistrationError, string> =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ? right(email)
+    : left({ type: "VALIDATION", field: "email", message: "Invalid email format" });
+
+const validatePassword = (password: string): Either<RegistrationError, string> =>
+  password.length >= 8
+    ? right(password)
+    : left({ type: "VALIDATION", field: "password", message: "Min 8 characters" });
+
+const checkNotTaken = async (email: string): Promise<Either<RegistrationError, string>> => {
+  const existing = await db.users.findByEmail(email);
+  return existing
+    ? left({ type: "CONFLICT", message: `${email} is already registered` })
+    : right(email);
+};
+
+const hashPassword = (password: string): Either<RegistrationError, string> => {
+  const t = Try.run(() => bcrypt.hashSync(password, 10));
+  return t.isSuccess()
+    ? right(t.onFail(() => ""))
+    : left({ type: "PERSISTENCE", message: "Failed to hash password" });
+};
+
+const register = async (dto: RegisterDto): Promise<Either<RegistrationError, User>> =>
+  validateEmail(dto.email)
+    .bind(() => validatePassword(dto.password))
+    .bindAsync(() => checkNotTaken(dto.email))
+    .then(e => e.bind(() => hashPassword(dto.password)))
+    .then(e => e.bindAsync(async hash => {
+      const user = await db.users.create({ email: dto.email, passwordHash: hash });
+      return right<RegistrationError, User>(user);
+    }));
+
+// Usage
+const result = await register({ email: "alice@example.com", password: "Secure1234" });
+
+result.match(
+  user  => res.status(201).json({ id: user.id }),
+  error => {
+    const status = error.type === "CONFLICT" ? 409
+                 : error.type === "VALIDATION" ? 422
+                 : 500;
+    res.status(status).json(error);
+  }
+);
+```
+
+### Recipe 3: Batch processing with full error collection
+
+Process a list of items and collect all failures, without stopping on the first one.
+
+```typescript
+import { Validate, sequenceValidate } from 'mini-fp';
+const { valid, invalid } = Validate;
+
+interface ProductRow { sku: string; price: string; stock: string }
+interface Product    { sku: string; price: number; stock: number }
+
+const parseProduct = (row: ProductRow, index: number): Validate<string, Product> => {
+  const price = parseFloat(row.price);
+  const stock = parseInt(row.stock, 10);
+
+  const priceV: Validate<string, number> =
+    isNaN(price) || price < 0
+      ? invalid([`Row ${index}: invalid price "${row.price}"`])
+      : valid(price);
+
+  const stockV: Validate<string, number> =
+    isNaN(stock) || stock < 0
+      ? invalid([`Row ${index}: invalid stock "${row.stock}"`])
+      : valid(stock);
+
+  return priceV
+    .combine(stockV)
+    .map(() => ({ sku: row.sku, price, stock }));
+};
+
+const importProducts = (rows: ProductRow[]): Validate<string, Product[]> =>
+  sequenceValidate(rows.map((row, i) => parseProduct(row, i)));
+
+const csvRows: ProductRow[] = [
+  { sku: "A1", price: "9.99",  stock: "100"  },
+  { sku: "A2", price: "-1",    stock: "50"   },  // bad price
+  { sku: "A3", price: "4.99",  stock: "abc"  },  // bad stock
+];
+
+const outcome = importProducts(csvRows);
+
+if (outcome.isInvalid()) {
+  console.error("Import failed:", outcome.unwrapInvalid());
+  // ["Row 1: invalid price \"-1\"", "Row 2: invalid stock \"abc\""]
+} else {
+  await productService.bulkInsert(outcome.unwrap());
+}
+```
+
+### Recipe 4: Optional chaining across async boundaries
+
+```typescript
+import { Option } from 'mini-fp';
+
+const getRecommendations = async (sessionToken: string | null): Promise<string[]> => {
+  return Option.from(sessionToken)
+    .bindAsync(async token => {
+      const userId = await auth.validateToken(token);
+      return Option.from(userId);
+    })
+    .then(opt => opt.bindAsync(async id => {
+      const prefs = await db.preferences.findByUser(id);
+      return Option.from(prefs);
+    }))
+    .then(opt => opt.mapAsync(async prefs => {
+      return recommendations.forPreferences(prefs);
+    }))
+    .then(opt => opt.orElseAsync(async () => recommendations.trending()));
+};
 ```
 
 ---
 
 ## API Reference
 
-### Static methods
+### `Option<T>`
 
-| Method | Signature | Description |
+| | Signature | Description |
 |---|---|---|
-| `Some` | `Some<T>(value: T): Option<T>` | Creates a Some; throws if value is null/undefined |
-| `None` | `None<T>(): Option<T>` | Creates a None |
-| `From` | `From<T>(value: T \| null \| undefined): Option<T>` | Safe constructor from nullable |
-| `FromAsync` | `FromAsync<T>(value: Promise<T> \| null \| undefined): Promise<Option<T>>` | Safe constructor from nullable Promise |
+| `Option.some` | `some<T>(value: T): Option<T>` | Creates `some`; throws if value is `null`/`undefined` |
+| `Option.none` | `none<T>(): Option<T>` | Creates `none` |
+| `Option.from` | `from<T>(value: T \| null \| undefined): Option<T>` | Safe constructor from nullable |
+| `Option.FromAsync` | `FromAsync<T>(value: Promise<T> \| null \| undefined): Promise<Option<T>>` | Safe async constructor |
+| `.isSome()` | `(): boolean` | `true` if value is present |
+| `.isNone()` | `(): boolean` | `true` if no value |
+| `.unwrap()` | `(): T` | Returns value; throws if `none` |
+| `.map()` | `<U>(fn: (v: T) => U): Option<U>` | Transforms the inner value |
+| `.mapAsync()` | `<U>(fn: (v: T) => Promise<U>): Promise<Option<U>>` | Async map |
+| `.bind()` | `<U>(fn: (v: T) => Option<U>): Option<U>` | Chains `Option`-returning functions |
+| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): Promise<Option<U>>` | Async bind |
+| `.match()` | `<U>(onSome, onNone): U` | Pattern match on `some`/`none` |
+| `.matchAsync()` | `<U>(onSome, onNone): Promise<U>` | Async pattern match |
+| `.orElse()` | `(defaultValue: T \| (() => T)): T` | Returns value or fallback |
+| `.orElseAsync()` | `(defaultValue: Promise<T> \| (() => Promise<T>)): Promise<T>` | Async fallback |
 
-### Instance methods
+### `Either<L, R>`
 
-| Method | Signature | Description |
+| | Signature | Description |
 |---|---|---|
-| `isSome` | `isSome(): boolean` | True if value is present |
-| `isNone` | `isNone(): boolean` | True if no value |
-| `Unwrap` | `Unwrap(): T` | Returns value; throws if None |
-| `map` | `map<U>(fn: (v: T) => U): Option<U>` | Transforms the inner value |
-| `mapAsync` | `mapAsync<U>(fn: (v: T) => Promise<U>): Promise<Option<U>>` | Async map |
-| `bind` | `bind<U>(fn: (v: T) => Option<U>): Option<U>` | Chains Option-returning functions |
-| `bindAsync` | `bindAsync<U>(fn: (v: T) => Promise<Option<U>>): Promise<Option<U>>` | Async bind |
-| `match` | `match<U>(onSome, onNone): U` | Pattern match on Some/None |
-| `matchAsync` | `matchAsync<U>(onSome, onNone): Promise<U>` | Async pattern match |
-| `orElse` | `orElse(defaultValue: T \| (() => T)): T` | Returns value or fallback |
-| `orElseAsync` | `orElseAsync(defaultValue: Promise<T> \| (() => Promise<T>)): Promise<T>` | Async fallback |
+| `Either.left` | `left<L, R>(value: L): Either<L, R>` | Creates `left`; throws if `null`/`undefined` |
+| `Either.right` | `right<L, R>(value: R): Either<L, R>` | Creates `right`; throws if `null`/`undefined` |
+| `.isLeft()` | `(): boolean` | `true` if left |
+| `.isRight()` | `(): boolean` | `true` if right |
+| `.unwrapLeft()` | `(): L` | Returns left value; throws if right |
+| `.unwrapRight()` | `(): R` | Returns right value; throws if left |
+| `.map()` | `<U>(fn: (v: R) => U): Either<L, U>` | Transforms the right value |
+| `.mapLeft()` | `<U>(fn: (v: L) => U): Either<U, R>` | Transforms the left value |
+| `.bind()` | `<U>(fn: (v: R) => Either<L, U>): Either<L, U>` | Chains on the right side |
+| `.bindLeft()` | `<U>(fn: (v: L) => Either<U, R>): Either<U, R>` | Chains on the left side |
+| `.match()` | `<U>(onRight, onLeft): U` | Pattern match on `right`/`left` |
+| `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
+| `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
+| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): Promise<Either<L, U>>` | Async bind right |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): Promise<Either<U, R>>` | Async bind left |
+| `.matchAsync()` | `<U>(onRight, onLeft): Promise<U>` | Async pattern match |
+
+### `Try<T>`
+
+| | Signature | Description |
+|---|---|---|
+| `Try.run` | `run<T>(fn: () => T): Try<T>` | Runs a sync function, catches exceptions |
+| `Try.runAsync` | `runAsync<T>(fn: () => Promise<T>): Promise<Try<T>>` | Runs an async function, catches exceptions |
+| `.isSuccess()` | `(): boolean` | `true` if no exception was thrown |
+| `.isFailure()` | `(): boolean` | `true` if an exception was caught |
+| `.onFail()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
+| `.onFailAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Async failure handler |
+
+### `Validate<L, R>`
+
+| | Signature | Description |
+|---|---|---|
+| `Validate.valid` | `valid<L, R>(value: R): Validate<L, R>` | Creates valid; throws if value is `null` |
+| `Validate.invalid` | `invalid<L, R>(errors: L[]): Validate<L, R>` | Creates invalid; throws if `null` |
+| `.isValid()` | `(): boolean` | `true` if valid |
+| `.isInvalid()` | `(): boolean` | `true` if invalid |
+| `.unwrap()` | `(): R` | Returns value; throws if invalid |
+| `.unwrapInvalid()` | `(): L[]` | Returns errors; throws if valid |
+| `.map()` | `<U>(fn: (v: R) => U): Validate<L, U>` | Transforms the valid value |
+| `.bind()` | `<U>(fn: (v: R) => Validate<L, U>): Validate<L, U>` | Chains on valid |
+| `.combine()` | `(other: Validate<L, R>): Validate<L, R>` | Merges two validations, accumulating errors |
+| `.combineAsync()` | `(other: Promise<Validate<L, R>>): Promise<Validate<L, R>>` | Async combine |
+
+### Traversal functions
+
+| Function | Signature | Description |
+|---|---|---|
+| `traverseOption` | `<T>(items: Option<T>[]): Option<T[]>` | Collects all `some` values; returns `none` on first `none` |
+| `traverseOptionAsync` | `<T>(items: Option<Promise<T>>[]): Promise<Option<T[]>>` | Async version |
+| `traverseEither` | `<L, R>(items: Either<L, R>[]): Either<L, R[]>` | Collects all `right` values; returns first `left` |
+| `traverseEitherAsync` | `<L, R>(items: Either<L, Promise<R>>[]): Promise<Either<L, R[]>>` | Async version |
+| `sequenceValidate` | `<L, R>(validates: Validate<L, R>[]): Validate<L, R[]>` | Sequences, accumulating all errors |
+| `sequenceValidateAsync` | `<L, R>(validates: Promise<Validate<L, R>[]>): Promise<Validate<L, R[]>>` | Async version |
+
+### `Unit`
+
+```typescript
+import { Unit } from 'mini-fp';
+Unit.default; // the singleton Unit value
+```
+
+---
+
+## Design notes
+
+`mini-fp` follows the same conventions as `language-ext`:
+
+- **Right-biased Either** — `map` and `bind` operate on the right (success) side by default; `mapLeft`/`bindLeft` let you work on the left side when needed.
+- **Fail-fast vs. error-harvesting** — `Either` and `Option` short-circuit on the first failure; `Validate` accumulates all failures. Choose based on whether you want to stop early or report everything.
+- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `from` and `FromAsync` which are the safe entry points). Once inside a monad, the value is guaranteed non-null.
+- **Async transparency** — every synchronous operation has an `Async` counterpart with the same semantics, so you can mix sync and async pipelines freely.
 
 ---
 
@@ -172,6 +1054,9 @@ const value = await None<User>().orElseAsync(async () => guestUser());
 ```bash
 # Run tests
 npm test
+
+# Watch mode
+npm run test:watch
 
 # Build
 npm run build
