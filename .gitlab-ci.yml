@@ -43,8 +43,6 @@ npm-publish:
       aud: "npm:registry.npmjs.org"
     SIGSTORE_ID_TOKEN:
       aud: sigstore
-  variables:
-    NPM_CONFIG_PROVENANCE: "true"
   script:
     - npm install -g npm@latest
     - npm --version
