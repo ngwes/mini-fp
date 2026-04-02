@@ -161,4 +161,66 @@ describe("Either", () => {
       ),
     ).toEqual("4");
   });
+
+  it("chains bindAsync on right without .then()", async () => {
+    expect((await
+      right<ErrorResult, number>(2)
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(x => asTask(right<ErrorResult, string>(x.toString()))))
+      .unwrapRight(),
+    ).toEqual("4");
+  });
+
+  it("chains bindAsync short-circuits on left without .then()", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(x => asTask(right<ErrorResult, string>(x.toString()))))
+      .isLeft(),
+    ).toEqual(true);
+  });
+
+  it("chains three bindAsync calls without .then()", async () => {
+    expect((await
+      right<ErrorResult, number>(1)
+        .bindAsync(x => asTask(right<ErrorResult, number>(x + 1)))
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 3)))
+        .bindAsync(x => asTask(right<ErrorResult, string>(x.toString()))))
+      .unwrapRight(),
+    ).toEqual("6");
+  });
+
+  it("bindAsync accepts a Promise overload on right", async () => {
+    expect((await
+      right<ErrorResult, number>(2)
+        .bindAsync(asTask(right<ErrorResult, string>("hello"))))
+      .unwrapRight(),
+    ).toEqual("hello");
+  });
+
+  it("bindAsync accepts a Promise overload and short-circuits on left", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindAsync(asTask(right<ErrorResult, string>("hello"))))
+      .isLeft(),
+    ).toEqual(true);
+  });
+
+  it("EitherAsync.bindAsync accepts a Promise overload on right", async () => {
+    expect((await
+      right<ErrorResult, number>(2)
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(asTask(right<ErrorResult, string>("world"))))
+      .unwrapRight(),
+    ).toEqual("world");
+  });
+
+  it("EitherAsync.bindAsync accepts a Promise overload and short-circuits on left", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(asTask(right<ErrorResult, string>("world"))))
+      .isLeft(),
+    ).toEqual(true);
+  });
 });
