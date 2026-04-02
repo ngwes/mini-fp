@@ -1,3 +1,10 @@
+## [1.0.2](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.1...v1.0.2) (2026-04-02)
+
+
+### Bug Fixes
+
+* update npm publishing pipeline ([bf5f574](https://gitlab.com/nadir.gherbi1/mini-fp/commit/bf5f5741a54f5a233e138a5d6645049aa6fcb832))
+
 ## [1.0.1](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.0...v1.0.1) (2026-04-02)
 
 
