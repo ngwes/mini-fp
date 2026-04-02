@@ -1,3 +1,10 @@
+## [1.0.3](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.2...v1.0.3) (2026-04-02)
+
+
+### Bug Fixes
+
+* trigger new release ([49d0dce](https://gitlab.com/nadir.gherbi1/mini-fp/commit/49d0dcefb5f7e4640f26d16f92567fd81917dbbd))
+
 ## [1.0.2](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.1...v1.0.2) (2026-04-02)
 
 
