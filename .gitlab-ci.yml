@@ -36,8 +36,10 @@ release-please:
         --repo-url=$CI_PROJECT_PATH
         --release-type=node
         --target-branch=$CI_DEFAULT_BRANCH
+        --api-url=$CI_SERVER_URL/api/v4
     - npx release-please github-release
         --token=$RELEASE_PLEASE_TOKEN
         --repo-url=$CI_PROJECT_PATH
         --release-type=node
         --target-branch=$CI_DEFAULT_BRANCH
+        --api-url=$CI_SERVER_URL/api/v4
