@@ -2,29 +2,29 @@ export class Option<T>{
 
     private constructor(private readonly value: T | null | undefined){}
 
-    static Some<T>(value: T): Option<T>{
+    static some<T>(value: T): Option<T>{
         if(value === null || value == undefined)
             throw new Error("Cannot create Some with null or undefined");
 
         return new Option(value);
     }
 
-    static None<T>() : Option<T>{
+    static none<T>() : Option<T>{
         return new Option<T>(undefined);
     }
 
-    static From<T>(value: T | null | undefined): Option<T>{
+    static from<T>(value: T | null | undefined): Option<T>{
         return value === null || value === undefined ?
-             Option.None<T>() : Option.Some<T>(value);
+             Option.none<T>() : Option.some<T>(value);
     }
 
     static async FromAsync<T>(value: Promise<T> | null | undefined): Promise<Option<T>>{
         const promiseValue = await value;
         return promiseValue === null || promiseValue === undefined ?
-             Option.None<T>() : Option.Some<T>(promiseValue);
+             Option.none<T>() : Option.some<T>(promiseValue);
     }
 
-    Unwrap(): T{
+    unwrap(): T{
         if(this.value === null || this.value === undefined)
          throw new Error("Invalid state of the object");
 
@@ -41,19 +41,19 @@ export class Option<T>{
     }
 
     map<U>(fn: (value: T) => U) : Option<U>{
-        return this.isSome()? Option.From(fn(this.value!)): Option.None<U>();
+        return this.isSome()? Option.from(fn(this.value!)): Option.none<U>();
     }
 
     async mapAsync<U>(fn: (value: T) => Promise<U>) : Promise<Option<U>>{
-        return this.isSome()? Option.From(await fn(this.value!)): Option.None<U>();
+        return this.isSome()? Option.from(await fn(this.value!)): Option.none<U>();
     }
 
     bind<U>(fn: (value: T) => Option<U>) : Option<U>{
-        return this.isSome()? fn(this.value!): Option.None<U>();
+        return this.isSome()? fn(this.value!): Option.none<U>();
     }
 
     async bindAsync<U>(fn: (value: T) => Promise<Option<U>>) : Promise<Option<U>>{
-        return this.isSome()? await fn(this.value!): Option.None<U>();
+        return this.isSome()? await fn(this.value!): Option.none<U>();
     }
 
     match<U>(onSome: (value: T) => U,
