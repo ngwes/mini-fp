@@ -30,7 +30,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 ## Installation
 
 ```bash
-npm install mini-fp
+npm i @ngwes/mini-fp
 ```
 
 ---
