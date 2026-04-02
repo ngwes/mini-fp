@@ -2,7 +2,7 @@
 
 A minimal TypeScript functional programming library inspired by [language-ext](https://github.com/louthy/language-ext) for .NET. Provides monadic types to handle absence, errors, and async flows without null checks or exceptions.
 
-**Zero production dependencies. Node >= 18.**
+**Zero production dependencies.**
 
 ---
 
@@ -18,6 +18,12 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Traversal Utilities](#traversal-utilities)
 - [Real-World Recipes](#real-world-recipes)
 - [API Reference](#api-reference)
+  - [Option\<T\>](#optiont-1)
+  - [OptionAsync\<T\>](#optionasync-t)
+  - [Either\<L, R\>](#eitherl-r-1)
+  - [EitherAsync\<L, R\>](#eitherasyncl-r)
+  - [Try\<T\>](#tryt-1)
+  - [Validate\<L, R\>](#validatel-r-1)
 
 ---
 
@@ -179,11 +185,19 @@ const user = await Option.FromAsync(db.findUser(id)); // Promise<Option<User>>
 const upper = await from("hello").mapAsync(async s => s.toUpperCase());
 // some("HELLO")
 
-// bindAsync
+// bindAsync — returns OptionAsync<U>, which is chainable and awaitable
 const profile = await from(userId).bindAsync(async id => {
   const row = await db.query("SELECT * FROM profiles WHERE id = ?", [id]);
   return from(row ?? null); // none if not found
 });
+
+// Chain multiple async steps directly — no .then() unwrapping needed
+const result = await from(sessionToken)
+  .bindAsync(async token => from(await auth.validateToken(token)))
+  .bindAsync(async id   => from(await db.users.findById(id)));
+
+// Also accepts a Promise<Option<U>> directly
+const fromPromise = await from(value).bindAsync(fetchOptionFromSomewhere());
 
 // matchAsync
 const response = await from(user).matchAsync(
@@ -309,12 +323,24 @@ left("oops").unwrapRight(); // throws
 const result = await right<string, string>("hello")
   .mapAsync(async s => s.toUpperCase()); // right("HELLO")
 
-// bindAsync
+// bindAsync — returns EitherAsync<L, U>, which is chainable and awaitable
 const user = await right<ApiError, string>("user-123")
   .bindAsync(async id => {
     const row = await db.users.findById(id);
     return row ? right(row) : left({ code: "NOT_FOUND", message: "User not found" });
   });
+
+// Chain multiple async steps directly — no .then() unwrapping needed
+const result = await right<ApiError, string>("user-123")
+  .bindAsync(async id    => fetchUser(id))
+  .bindAsync(async user  => fetchPermissions(user));
+
+// bindLeftAsync — chains on the left (error) side
+const recovered = await left<string, number>("not_found")
+  .bindLeftAsync(async code => fallbackLookup(code));
+
+// Also accepts a Promise<Either<L, U>> directly
+const fromPromise = await right<string, string>(id).bindAsync(fetchEitherFromSomewhere());
 
 // matchAsync
 const response = await result.matchAsync(
@@ -349,8 +375,8 @@ const requireAdmin = (user: User): Either<ApiError, User> =>
 // Compose the pipeline
 const handleRequest = async (token: string): Promise<Either<ApiError, User>> =>
   authenticate(token)
-    .bindAsync(id => fetchUser(id))
-    .then(e => e.bind(requireAdmin));
+    .bindAsync(id   => fetchUser(id))
+    .bindAsync(user => Promise.resolve(requireAdmin(user)));
 
 const result = await handleRequest("valid");
 
@@ -856,11 +882,11 @@ const register = async (dto: RegisterDto): Promise<Either<RegistrationError, Use
   validateEmail(dto.email)
     .bind(() => validatePassword(dto.password))
     .bindAsync(() => checkNotTaken(dto.email))
-    .then(e => e.bind(() => hashPassword(dto.password)))
-    .then(e => e.bindAsync(async hash => {
+    .bindAsync(_email => Promise.resolve(hashPassword(dto.password)))
+    .bindAsync(async hash => {
       const user = await db.users.create({ email: dto.email, passwordHash: hash });
       return right<RegistrationError, User>(user);
-    }));
+    });
 
 // Usage
 const result = await register({ email: "alice@example.com", password: "Secure1234" });
@@ -936,13 +962,11 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
       const userId = await auth.validateToken(token);
       return Option.from(userId);
     })
-    .then(opt => opt.bindAsync(async id => {
+    .bindAsync(async id => {
       const prefs = await db.preferences.findByUser(id);
       return Option.from(prefs);
-    }))
-    .then(opt => opt.mapAsync(async prefs => {
-      return recommendations.forPreferences(prefs);
-    }))
+    })
+    .then(opt => opt.mapAsync(async prefs => recommendations.forPreferences(prefs)))
     .then(opt => opt.orElseAsync(async () => recommendations.trending()));
 };
 ```
@@ -965,7 +989,7 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.map()` | `<U>(fn: (v: T) => U): Option<U>` | Transforms the inner value |
 | `.mapAsync()` | `<U>(fn: (v: T) => Promise<U>): Promise<Option<U>>` | Async map |
 | `.bind()` | `<U>(fn: (v: T) => Option<U>): Option<U>` | Chains `Option`-returning functions |
-| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): Promise<Option<U>>` | Async bind |
+| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Async bind; returns chainable `OptionAsync` |
 | `.match()` | `<U>(onSome, onNone): U` | Pattern match on `some`/`none` |
 | `.matchAsync()` | `<U>(onSome, onNone): Promise<U>` | Async pattern match |
 | `.orElse()` | `(defaultValue: T \| (() => T)): T` | Returns value or fallback |
@@ -988,9 +1012,30 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.match()` | `<U>(onRight, onLeft): U` | Pattern match on `right`/`left` |
 | `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
 | `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): Promise<Either<L, U>>` | Async bind right |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): Promise<Either<U, R>>` | Async bind left |
+| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
 | `.matchAsync()` | `<U>(onRight, onLeft): Promise<U>` | Async pattern match |
+
+### `OptionAsync<T>`
+
+Returned by `Option.bindAsync()`. Wraps a `Promise<Option<T>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+
+| | Signature | Description |
+|---|---|---|
+| `OptionAsync.from` | `from<T>(promise: Promise<Option<T>>): OptionAsync<T>` | Wraps an existing promise |
+| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Chains on `some`; short-circuits on `none` |
+| `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
+
+### `EitherAsync<L, R>`
+
+Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<Either<L, R>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+
+| | Signature | Description |
+|---|---|---|
+| `EitherAsync.from` | `from<L, R>(promise: Promise<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
+| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right` |
+| `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `Try<T>`
 
@@ -1061,3 +1106,13 @@ npm run test:watch
 # Build
 npm run build
 ```
+
+# Thanks
+
+A special thanks to Franco, which has developed [Tiny-FP](https://github.com/FrancoMelandri/tiny-fp), from which this repository borrows its name and that has let me get in touch with functional programming for the first time.
+
+If you're interested in functional programming and Railway-oriented programming as well, here are two resources, even if for C#, that are the same first two I have used to start studying this paradigms.
+
+[Functional Programming in C#, by Enrico Buonanno](https://www.manning.com/books/functional-programming-in-c-sharp)
+
+[F# for fun and profit](https://fsharpforfunandprofit.com/)
