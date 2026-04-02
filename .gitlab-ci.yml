@@ -37,7 +37,17 @@ npm-publish:
   stage: publish
   image: node:22
   when: manual
+  id_tokens:
+    NPM_ID_TOKEN:
+      aud: "npm:registry.npmjs.org"
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  variables:
+    NPM_CONFIG_PROVENANCE: "true"
   script:
     - npm ci
-    - npm run build
+    - npm run build --if-present
     - npm publish
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
