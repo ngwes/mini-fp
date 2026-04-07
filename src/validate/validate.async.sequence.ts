@@ -1,4 +1,4 @@
-import { Validate } from "./Validate";
+import { Validate } from "./Validate.js";
 
 export async function sequenceValidateAsync<L, R>(
     validates: Promise<Validate<L, R>[]>

@@ -1,5 +1,5 @@
 
-import { Option } from "./Option";
+import { Option } from "./Option.js";
 
 export function traverseOption<T>(items: Option<T>[]): Option<T[]> {
   const result: T[] = [];

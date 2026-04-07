@@ -1,4 +1,4 @@
-import { Either } from "./Either";
+import { Either } from "./Either.js";
 
 export async function traverseEitherAsync<L, R>(
   items: Either<L, Promise<R>>[]
