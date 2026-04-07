@@ -1,3 +1,10 @@
+## [1.0.5](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.4...v1.0.5) (2026-04-07)
+
+
+### Bug Fixes
+
+* change the tsconfig to fix exports ([646b6c6](https://gitlab.com/nadir.gherbi1/mini-fp/commit/646b6c606c7d7b3f6226372ea921b39b0b94a7d3))
+
 ## [1.0.4](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.3...v1.0.4) (2026-04-02)
 
 
