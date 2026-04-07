@@ -3,7 +3,8 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
-    "module": "ES2020",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "target": "ES2020",
     "types": [],
 
@@ -25,7 +26,8 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+
   },
   "include": ["src"]
 }
