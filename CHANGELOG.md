@@ -1,3 +1,10 @@
+## [1.0.6](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.5...v1.0.6) (2026-04-07)
+
+
+### Bug Fixes
+
+* update imports to fix broken build ([e256d83](https://gitlab.com/nadir.gherbi1/mini-fp/commit/e256d8337bfac84c06571bc4ce4ed37f372a4336))
+
 ## [1.0.5](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.4...v1.0.5) (2026-04-07)
 
 
