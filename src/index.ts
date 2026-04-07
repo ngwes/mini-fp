@@ -1,14 +1,14 @@
-export * from "./option/Option";
-export * from "./option/traverse";
-export * from "./option/traverse.async";
+export * from "./option/Option.js";
+export * from "./option/traverse.js";
+export * from "./option/traverse.async.js";
 
-export * from "./either/Either";
-export * from "./either/traverse";
-export * from "./either/traverse.async";
-export * from "./utils/promise.utils";
+export * from "./either/Either.js";
+export * from "./either/traverse.js";
+export * from "./either/traverse.async.js";
+export * from "./utils/promise.utils.js";
 
-export * from "./try/Try";
+export * from "./try/Try.js";
 
-export * from "./validate/Validate";
-export * from "./validate/validate.async.sequence";
-export * from "./validate/validate.sequence";
+export * from "./validate/Validate.js";
+export * from "./validate/validate.async.sequence.js";
+export * from "./validate/validate.sequence.js";
