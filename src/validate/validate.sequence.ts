@@ -1,4 +1,4 @@
-import { Validate } from "./Validate";
+import { Validate } from "./Validate.js";
 
 export function sequenceValidate<L, R>(
   validates: Validate<L, R>[],

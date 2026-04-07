@@ -1,5 +1,5 @@
 
-import { Either } from "./Either";
+import { Either } from "./Either.js";
 
 export function traverseEither<L, R>(items: Either<L, R>[]): Either<L, R[]> {
   const result: R[] = [];

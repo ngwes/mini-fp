@@ -1,4 +1,4 @@
-import { Option } from "./Option";
+import { Option } from "./Option.js";
 
 export async function traverseOptionAsync<T>(
   items: Option<Promise<T>>[]
