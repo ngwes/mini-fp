@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Either, asTask } from "../src";
+import { Either, EitherAsync, asTask } from "../src";
 import { ErrorResult } from "./models/Error";
 const { right, left } = Either;
 
@@ -222,5 +222,72 @@ describe("Either", () => {
         .bindAsync(asTask(right<ErrorResult, string>("world"))))
       .isLeft(),
     ).toEqual(true);
+  });
+
+  it("EitherAsync.right creates a right EitherAsync", async () => {
+    expect((await EitherAsync.right<ErrorResult, number>(42)).unwrapRight()).toEqual(42);
+  });
+
+  it("EitherAsync.left creates a left EitherAsync", async () => {
+    expect((await EitherAsync.left<ErrorResult, number>(ErrorResult.with("code", "message"))).isLeft()).toEqual(true);
+  });
+
+  it("Either.bindAsync accepts EitherAsync-returning fn on right", async () => {
+    expect((await
+      right<ErrorResult, number>(2)
+        .bindAsync(x => EitherAsync.right<ErrorResult, number>(x * 3)))
+      .unwrapRight(),
+    ).toEqual(6);
+  });
+
+  it("Either.bindAsync accepts EitherAsync-returning fn and short-circuits on left", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindAsync(x => EitherAsync.right<ErrorResult, number>(x * 3)))
+      .isLeft(),
+    ).toEqual(true);
+  });
+
+  it("EitherAsync.bindAsync accepts EitherAsync-returning fn on right", async () => {
+    expect((await
+      right<ErrorResult, number>(2)
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(x => EitherAsync.right<ErrorResult, string>(x.toString())))
+      .unwrapRight(),
+    ).toEqual("4");
+  });
+
+  it("EitherAsync.bindAsync accepts EitherAsync-returning fn and short-circuits on left", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindAsync(x => asTask(right<ErrorResult, number>(x * 2)))
+        .bindAsync(x => EitherAsync.right<ErrorResult, string>(x.toString())))
+      .isLeft(),
+    ).toEqual(true);
+  });
+
+  it("Either.bindLeftAsync accepts EitherAsync-returning fn on left", async () => {
+    expect((await
+      left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .bindLeftAsync(_ => EitherAsync.right<string, number>(42)))
+      .unwrapRight(),
+    ).toEqual(42);
+  });
+
+  it("Either.bindLeftAsync accepts EitherAsync-returning fn and short-circuits on right", async () => {
+    expect((await
+      right<ErrorResult, number>(10)
+        .bindLeftAsync(_ => EitherAsync.right<string, number>(42)))
+      .unwrapRight(),
+    ).toEqual(10);
+  });
+
+  it("chains EitherAsync constructors with bindAsync for fluent pipeline", async () => {
+    expect((await
+      EitherAsync.right<ErrorResult, number>(1)
+        .bindAsync(x => EitherAsync.right<ErrorResult, number>(x + 1))
+        .bindAsync(x => EitherAsync.right<ErrorResult, string>(x.toString())))
+      .unwrapRight(),
+    ).toEqual("2");
   });
 });

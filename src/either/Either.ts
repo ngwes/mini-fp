@@ -5,10 +5,19 @@ export class EitherAsync<L, R> implements PromiseLike<Either<L, R>> {
     return new EitherAsync(promise);
   }
 
+  static right<L, R>(value: R): EitherAsync<L, R> {
+    return new EitherAsync(Promise.resolve(Either.right<L, R>(value)));
+  }
+
+  static left<L, R>(value: L): EitherAsync<L, R> {
+    return new EitherAsync(Promise.resolve(Either.left<L, R>(value)));
+  }
+
   public bindAsync<U>(fn: (value: R) => Promise<Either<L, U>>): EitherAsync<L, U>;
+  public bindAsync<U>(fn: (value: R) => EitherAsync<L, U>): EitherAsync<L, U>;
   public bindAsync<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>;
   public bindAsync<U>(
-    fnOrPromise: ((value: R) => Promise<Either<L, U>>) | Promise<Either<L, U>>,
+    fnOrPromise: ((value: R) => Promise<Either<L, U>> | EitherAsync<L, U>) | Promise<Either<L, U>>,
   ): EitherAsync<L, U> {
     if (fnOrPromise instanceof Promise) {
       return new EitherAsync<L, U>(
@@ -21,16 +30,17 @@ export class EitherAsync<L, R> implements PromiseLike<Either<L, R>> {
     }
     return new EitherAsync<L, U>(
       this.promise.then(e => {
-        if (e.isRight()) return fnOrPromise(e.unwrapRight());
+        if (e.isRight()) return Promise.resolve(fnOrPromise(e.unwrapRight()));
         return Promise.resolve(Either.left<L, U>(e.unwrapLeft()));
       }),
     );
   }
 
   public bindLeftAsync<U>(fn: (value: L) => Promise<Either<U, R>>): EitherAsync<U, R>;
+  public bindLeftAsync<U>(fn: (value: L) => EitherAsync<U, R>): EitherAsync<U, R>;
   public bindLeftAsync<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>;
   public bindLeftAsync<U>(
-    fnOrPromise: ((value: L) => Promise<Either<U, R>>) | Promise<Either<U, R>>,
+    fnOrPromise: ((value: L) => Promise<Either<U, R>> | EitherAsync<U, R>) | Promise<Either<U, R>>,
   ): EitherAsync<U, R> {
     if (fnOrPromise instanceof Promise) {
       return new EitherAsync<U, R>(
@@ -43,7 +53,7 @@ export class EitherAsync<L, R> implements PromiseLike<Either<L, R>> {
     }
     return new EitherAsync<U, R>(
       this.promise.then(e => {
-        if (e.isLeft()) return fnOrPromise(e.unwrapLeft());
+        if (e.isLeft()) return Promise.resolve(fnOrPromise(e.unwrapLeft()));
         return Promise.resolve(Either.right<U, R>(e.unwrapRight()));
       }),
     );
@@ -133,30 +143,34 @@ export class Either<L, R> {
   }
 
   public bindAsync<U>(fn: (value: R) => Promise<Either<L, U>>): EitherAsync<L, U>;
+  public bindAsync<U>(fn: (value: R) => EitherAsync<L, U>): EitherAsync<L, U>;
   public bindAsync<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>;
   public bindAsync<U>(
-    fnOrPromise: ((value: R) => Promise<Either<L, U>>) | Promise<Either<L, U>>,
+    fnOrPromise: ((value: R) => Promise<Either<L, U>> | EitherAsync<L, U>) | Promise<Either<L, U>>,
   ): EitherAsync<L, U> {
     if (fnOrPromise instanceof Promise) {
       if (this.isLeft())
         return EitherAsync.from(Promise.resolve(Either.left<L, U>(this.leftValue as L)));
       return EitherAsync.from(fnOrPromise);
     }
-    if (this.isRight()) return EitherAsync.from(fnOrPromise(this.rightValue as R));
+    if (this.isRight())
+      return EitherAsync.from(Promise.resolve(fnOrPromise(this.rightValue as R)));
     return EitherAsync.from(Promise.resolve(Either.left<L, U>(this.leftValue as L)));
   }
 
   public bindLeftAsync<U>(fn: (value: L) => Promise<Either<U, R>>): EitherAsync<U, R>;
+  public bindLeftAsync<U>(fn: (value: L) => EitherAsync<U, R>): EitherAsync<U, R>;
   public bindLeftAsync<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>;
   public bindLeftAsync<U>(
-    fnOrPromise: ((value: L) => Promise<Either<U, R>>) | Promise<Either<U, R>>,
+    fnOrPromise: ((value: L) => Promise<Either<U, R>> | EitherAsync<U, R>) | Promise<Either<U, R>>,
   ): EitherAsync<U, R> {
     if (fnOrPromise instanceof Promise) {
       if (this.isRight())
         return EitherAsync.from(Promise.resolve(Either.right<U, R>(this.rightValue as R)));
       return EitherAsync.from(fnOrPromise);
     }
-    if (this.isLeft()) return EitherAsync.from(fnOrPromise(this.leftValue as L));
+    if (this.isLeft())
+      return EitherAsync.from(Promise.resolve(fnOrPromise(this.leftValue as L)));
     return EitherAsync.from(Promise.resolve(Either.right<U, R>(this.rightValue as R)));
   }
 
