@@ -11,6 +11,18 @@ describe("Option", () => {
         expect(from(2).unwrap()).toEqual(2);
     });
 
+    it("Uses from to instantiate undefined correctly using noneWhen", () => {
+        expect(from(undefined, _ => true).isNone()).toEqual(true);
+    });
+
+    it("Uses from to instantiate a value correctly using noneWhen", () => {
+        expect(from(2, _ => _ > 2).unwrap()).toEqual(2);
+    });
+
+    it("Uses from to instantiate a value correctly using noneWhen", () => {
+        expect(from(2, _ => _ === 2).isNone()).toEqual(true);
+    });
+
     it("Unwraps correctly", () => {
         expect(some<number>(2).unwrap()).toEqual(2);
     });
