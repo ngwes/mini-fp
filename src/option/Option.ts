@@ -48,11 +48,6 @@ export class Option<T>{
         return new Option<T>(undefined);
     }
 
-    static from<T>(value: T | null | undefined): Option<T>{
-        return value === null || value === undefined ?
-             Option.none<T>() : Option.some<T>(value);
-    }
-
     static async FromAsync<T>(value: Promise<T> | null | undefined): Promise<Option<T>>{
         const promiseValue = await value;
         return promiseValue === null || promiseValue === undefined ?
@@ -133,5 +128,22 @@ export class Option<T>{
             return (onNone as (() => Promise<T>))();
 
         return onNone;
+    }
+
+    static from<T>(value: T, noneWhen: (value: T) => boolean): Option<T>
+    static from<T>(value: T | null | undefined): Option<T>
+    static from<T>(value: T | null | undefined, noneWhen?: (value: T) => boolean): Option<T> {
+        if(value === null || value === undefined )
+            return Option.none<T>();
+        if (noneWhen) 
+            {
+                let result:Option<T>;
+                if(noneWhen(value as T)) 
+                    result =  Option.none<T>()
+                else
+                    result = Option.some<T>(value as T);
+                return result;
+            }
+        return Option.some<T>(value);
     }
 }

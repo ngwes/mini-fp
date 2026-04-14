@@ -71,6 +71,10 @@ const c = from(null);         // none
 const d = from(undefined);    // none
 const e = from("hello");      // some("hello")
 
+// from with noneWhen: treats a value as none when the predicate returns true
+const h = from(-1, n => n < 0);   // none
+const i = from(5,  n => n < 0);   // some(5)
+
 // FromAsync: awaits a Promise, then applies from
 const f = await Option.FromAsync(fetchUserOrNull(id)); // Promise<Option<User>>
 ```
@@ -335,12 +339,24 @@ const result = await right<ApiError, string>("user-123")
   .bindAsync(async id    => fetchUser(id))
   .bindAsync(async user  => fetchPermissions(user));
 
+// bindAsync also accepts a function returning EitherAsync directly
+const result2 = await right<ApiError, string>("user-123")
+  .bindAsync(id => EitherAsync.from(fetchUser(id)));
+
 // bindLeftAsync — chains on the left (error) side
 const recovered = await left<string, number>("not_found")
   .bindLeftAsync(async code => fallbackLookup(code));
 
+// bindLeftAsync also accepts a function returning EitherAsync directly
+const recovered2 = await left<string, number>("not_found")
+  .bindLeftAsync(code => EitherAsync.from(fallbackLookup(code)));
+
 // Also accepts a Promise<Either<L, U>> directly
 const fromPromise = await right<string, string>(id).bindAsync(fetchEitherFromSomewhere());
+
+// EitherAsync.right / EitherAsync.left — create an already-resolved EitherAsync directly
+const asyncRight = EitherAsync.right<string, number>(42);   // EitherAsync<string, number>
+const asyncLeft  = EitherAsync.left<string, number>("err"); // EitherAsync<string, number>
 
 // matchAsync
 const response = await result.matchAsync(
@@ -981,7 +997,7 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 |---|---|---|
 | `Option.some` | `some<T>(value: T): Option<T>` | Creates `some`; throws if value is `null`/`undefined` |
 | `Option.none` | `none<T>(): Option<T>` | Creates `none` |
-| `Option.from` | `from<T>(value: T \| null \| undefined): Option<T>` | Safe constructor from nullable |
+| `Option.from` | `from<T>(value: T \| null \| undefined): Option<T>`<br>`from<T>(value: T, noneWhen: (v: T) => boolean): Option<T>` | Safe constructor from nullable; or use `noneWhen` to treat a value as absent based on a predicate |
 | `Option.FromAsync` | `FromAsync<T>(value: Promise<T> \| null \| undefined): Promise<Option<T>>` | Safe async constructor |
 | `.isSome()` | `(): boolean` | `true` if value is present |
 | `.isNone()` | `(): boolean` | `true` if no value |
@@ -1012,8 +1028,8 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.match()` | `<U>(onRight, onLeft): U` | Pattern match on `right`/`left` |
 | `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
 | `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
+| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
 | `.matchAsync()` | `<U>(onRight, onLeft): Promise<U>` | Async pattern match |
 
 ### `OptionAsync<T>`
@@ -1033,8 +1049,10 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 | | Signature | Description |
 |---|---|---|
 | `EitherAsync.from` | `from<L, R>(promise: Promise<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right` |
+| `EitherAsync.right` | `right<L, R>(value: R): EitherAsync<L, R>` | Creates an already-resolved `right` |
+| `EitherAsync.left` | `left<L, R>(value: L): EitherAsync<L, R>` | Creates an already-resolved `left` |
+| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right` |
 | `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `Try<T>`
