@@ -3,6 +3,7 @@ export * from "./option/traverse.js";
 export * from "./option/traverse.async.js";
 
 export * from "./either/Either.js";
+export * from "./either/EitherAsync.js";
 export * from "./either/traverse.js";
 export * from "./either/traverse.async.js";
 export * from "./utils/promise.utils.js";
