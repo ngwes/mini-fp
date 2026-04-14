@@ -1,3 +1,10 @@
+# [1.3.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.2.0...v1.3.0) (2026-04-14)
+
+
+### Features
+
+* **try:** implement TryAsync class and associated tests ([295476a](https://gitlab.com/nadir.gherbi1/mini-fp/commit/295476a142a2c994db39221d096bda809ba3dfd6))
+
 # [1.2.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.1.0...v1.2.0) (2026-04-14)
 
 
