@@ -1,3 +1,10 @@
+# [1.1.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.6...v1.1.0) (2026-04-14)
+
+
+### Features
+
+* add static methods for EitherAsync creation and enhance bindAsync functionality ([0409c4e](https://gitlab.com/nadir.gherbi1/mini-fp/commit/0409c4ed8554f9a4a5313465dda899bcff02514a))
+
 ## [1.0.6](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.5...v1.0.6) (2026-04-07)
 
 
