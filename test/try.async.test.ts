@@ -21,14 +21,14 @@ describe("TryAsync", () => {
     });
 
     it("onFail returns the value on success", async () => {
-        expect(await runAsync(success).onFail(() => Promise.resolve(0))).toEqual(1);
+        expect(await runAsync(success).onFailAsync(() => Promise.resolve(0))).toEqual(1);
     });
 
     it("onFail calls the handler on synchronous throw", async () => {
-        expect(await runAsync(throwSync).onFail(err => Promise.resolve(Number((err as Error).message.length)))).toEqual(10);
+        expect(await runAsync(throwSync).onFailAsync(err => Promise.resolve(Number((err as Error).message.length)))).toEqual(10);
     });
 
     it("onFail calls the handler on rejected promise", async () => {
-        expect(await runAsync(rejectAsync).onFail(err => Promise.resolve(Number((err as Error).message.length)))).toEqual(11);
+        expect(await runAsync(rejectAsync).onFailAsync(err => Promise.resolve(Number((err as Error).message.length)))).toEqual(11);
     });
 });
