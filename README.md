@@ -13,6 +13,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Option\<T\>](#optiont)
 - [Either\<L, R\>](#eitherl-r)
 - [Try\<T\>](#tryt)
+- [TryAsync\<T\>](#tryasynct)
 - [Validate\<L, R\>](#validatel-r)
 - [Unit](#unit)
 - [Traversal Utilities](#traversal-utilities)
@@ -23,6 +24,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
   - [Either\<L, R\>](#eitherl-r-1)
   - [EitherAsync\<L, R\>](#eitherasyncl-r)
   - [Try\<T\>](#tryt-1)
+  - [TryAsync\<T\>](#tryasynct-1)
   - [Validate\<L, R\>](#validatel-r-1)
 
 ---
@@ -418,6 +420,7 @@ const { run, runAsync } = Try;
 const result = Try.run(() => JSON.parse(rawInput));
 
 // runAsync: executes an async function, catches any throw or rejection
+// returns TryAsync<T> for fluent error handling
 const asyncResult = await Try.runAsync(() => fetch(url).then(r => r.json()));
 ```
 
@@ -428,28 +431,28 @@ Try.run(() => 42).isSuccess();            // true
 Try.run(() => { throw new Error() }).isFailure(); // true
 ```
 
-### Handling failures: `onFail` and `onFailAsync`
+### Handling failures: `onFailAsync` and `onFailAsyncAsync`
 
-`onFail` is the primary recovery method. It returns the success value directly, or calls your handler with the error:
+`onFailAsync` is the primary recovery method. It returns the success value directly, or calls your handler with the error:
 
 ```typescript
 // Returns 42 on success
-Try.run(() => 42).onFail(_err => 0);  // 42
+Try.run(() => 42).onFailAsync(_err => 0);  // 42
 
 // Calls the handler on failure
 Try.run(() => { throw new Error("oops") })
-  .onFail(err => {
+  .onFailAsync(err => {
     console.error(err);
     return -1;
   });
 // -1
 
-// Async recovery
-const data = await Try.runAsync(() => fetchRemote())
-  .then(t => t.onFailAsync(async err => {
+// Async recovery — use TryAsync.runAsync for a fluent API
+const data = await TryAsync.runAsync(() => fetchRemote())
+  .onFailAsync(async err => {
     await logError(err);
     return fallbackData;
-  }));
+  });
 ```
 
 ### Worked example: safe JSON parsing
@@ -459,7 +462,7 @@ type Config = { apiUrl: string; timeout: number };
 
 const parseConfig = (raw: string): Config => {
   return Try.run<Config>(() => JSON.parse(raw))
-    .onFail(_err => ({ apiUrl: "http://localhost", timeout: 5000 }));
+    .onFailAsync(_err => ({ apiUrl: "http://localhost", timeout: 5000 }));
 };
 
 parseConfig('{"apiUrl":"https://api.example.com","timeout":3000}');
@@ -476,7 +479,7 @@ import { Try } from 'mini-fp';
 
 const readConfigFile = async (path: string): Promise<string> => {
   const result = await Try.runAsync(() => fs.promises.readFile(path, "utf-8"));
-  return result.onFail(err => {
+  return result.onFailAsync(err => {
     console.warn(`Could not read ${path}:`, err);
     return "{}";
   });
@@ -492,9 +495,56 @@ const { left, right } = Either;
 const tryToEither = <T>(fn: () => T): Either<Error, T> => {
   const t = Try.run(fn);
   return t.isSuccess()
-    ? right(t.onFail(() => null as never))
-    : left(t.onFail(e => e as Error) as unknown as Error);
+    ? right(t.onFailAsync(() => null as never))
+    : left(t.onFailAsync(e => e as Error) as unknown as Error);
 };
+```
+
+---
+
+## TryAsync\<T\>
+
+`TryAsync<T>` is the async counterpart of `Try<T>`. It wraps an async computation that might throw or return a rejected promise, and provides a fluent `.onFailAsync()` method so you can handle the error in a single expression — no `await` + separate `then` needed.
+
+### Constructor
+
+```typescript
+import { TryAsync } from 'mini-fp';
+
+const result = TryAsync.runAsync(() => fetch(url).then(r => r.json()));
+```
+
+`Try.runAsync` also returns a `TryAsync<T>`, so both entry points are equivalent.
+
+### Handling failures: `onFailAsync`
+
+`.onFailAsync(handler)` returns the success value directly, or calls your async handler with the error:
+
+```typescript
+const data = await TryAsync.runAsync(() => fetchRemote())
+  .onFailAsync(async err => {
+    await logError(err);
+    return fallbackData;
+  });
+```
+
+### Awaiting the underlying `Try<T>`
+
+`TryAsync<T>` implements `PromiseLike<Try<T>>`, so you can `await` it to get back a `Try<T>` and inspect or transform it manually:
+
+```typescript
+const t = await TryAsync.runAsync(() => fetchRemote());
+t.isSuccess(); // true / false
+```
+
+### Worked example: fetching with fallback
+
+```typescript
+import { TryAsync } from 'mini-fp';
+
+const fetchConfig = (url: string): Promise<Config> =>
+  TryAsync.runAsync(() => fetch(url).then(r => r.json()))
+    .onFailAsync(_err => defaultConfig);
 ```
 
 ---
@@ -890,7 +940,7 @@ const checkNotTaken = async (email: string): Promise<Either<RegistrationError, s
 const hashPassword = (password: string): Either<RegistrationError, string> => {
   const t = Try.run(() => bcrypt.hashSync(password, 10));
   return t.isSuccess()
-    ? right(t.onFail(() => ""))
+    ? right(t.onFailAsync(() => ""))
     : left({ type: "PERSISTENCE", message: "Failed to hash password" });
 };
 
@@ -1060,11 +1110,19 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 | | Signature | Description |
 |---|---|---|
 | `Try.run` | `run<T>(fn: () => T): Try<T>` | Runs a sync function, catches exceptions |
-| `Try.runAsync` | `runAsync<T>(fn: () => Promise<T>): Promise<Try<T>>` | Runs an async function, catches exceptions |
+| `Try.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches exceptions — returns `TryAsync` |
 | `.isSuccess()` | `(): boolean` | `true` if no exception was thrown |
 | `.isFailure()` | `(): boolean` | `true` if an exception was caught |
-| `.onFail()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
-| `.onFailAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Async failure handler |
+| `.onFailAsync()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
+| `.onFailAsyncAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Async failure handler |
+
+### `TryAsync<T>`
+
+| | Signature | Description |
+|---|---|---|
+| `TryAsync.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches throws and rejections |
+| `.onFailAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Returns the value on success, calls async handler on failure |
+| `.then()` | `PromiseLike.then` | Allows `await` interop — resolves to `Try<T>` |
 
 ### `Validate<L, R>`
 

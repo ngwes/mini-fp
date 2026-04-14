@@ -9,6 +9,7 @@ export * from "./either/traverse.async.js";
 export * from "./utils/promise.utils.js";
 
 export * from "./try/Try.js";
+export * from "./try/TryAsync.js";
 
 export * from "./validate/Validate.js";
 export * from "./validate/validate.async.sequence.js";

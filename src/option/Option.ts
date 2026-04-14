@@ -48,7 +48,7 @@ export class Option<T>{
         return new Option<T>(undefined);
     }
 
-    static async FromAsync<T>(value: Promise<T> | null | undefined): Promise<Option<T>>{
+    static async fromAsync<T>(value: Promise<T> | null | undefined): Promise<Option<T>>{
         const promiseValue = await value;
         return promiseValue === null || promiseValue === undefined ?
              Option.none<T>() : Option.some<T>(promiseValue);
