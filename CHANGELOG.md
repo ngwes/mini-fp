@@ -1,3 +1,10 @@
+# [1.2.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.1.0...v1.2.0) (2026-04-14)
+
+
+### Features
+
+* **option:** add overload for from that let some add a noneWhen condition ([26903d1](https://gitlab.com/nadir.gherbi1/mini-fp/commit/26903d1d4043efa5ad20e408cbaa6fef40841c38))
+
 # [1.1.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.0.6...v1.1.0) (2026-04-14)
 
 
