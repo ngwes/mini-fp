@@ -1,3 +1,11 @@
+# [1.4.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.3.0...v1.4.0) (2026-04-16)
+
+
+### Features
+
+* **try:** accept PromiseLike in runAsync ([a0497c7](https://gitlab.com/nadir.gherbi1/mini-fp/commit/a0497c74485ee243b76ba7f604744bb07032c0ed))
+* update onFailAsync to accept PromiseLike handlers in Try and TryAsync classes ([cfa40f3](https://gitlab.com/nadir.gherbi1/mini-fp/commit/cfa40f3f2a8465a6feb37d7c27400e9e28cfa626))
+
 # [1.3.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.2.0...v1.3.0) (2026-04-14)
 
 
