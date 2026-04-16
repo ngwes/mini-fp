@@ -3,11 +3,11 @@ import { Try } from "./Try.js";
 export class TryAsync<T> implements PromiseLike<Try<T>> {
   private constructor(private readonly internal: Promise<Try<T>>) {}
 
-  static runAsync<T>(fn: () => Promise<T>): TryAsync<T> {
+  static runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T> {
     return new TryAsync(Try.runAsync(fn));
   }
 
-  onFailAsync(handler: (error: unknown) => Promise<T>): Promise<T> {
+  onFailAsync(handler: (error: unknown) => PromiseLike<T>): Promise<T> {
     return this.internal.then(result =>
       result.onFailAsync(handler)
     );

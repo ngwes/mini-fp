@@ -43,4 +43,14 @@ describe("Try", () => {
     it("runAsync returns the value on not errors", async () => {
         expect((await runAsync(notThrowableAsync)).onFail(x => Number((x as Error).message))).toEqual(1);
     });
+
+    it("onFailAsync accepts a PromiseLike handler on failure", async () => {
+        const promiseLike: PromiseLike<number> = { then: (resolve) => Promise.resolve(99).then(resolve) };
+        expect(await run(throwable).onFailAsync(() => promiseLike)).toEqual(99);
+    });
+
+    it("onFailAsync accepts a PromiseLike handler on success", async () => {
+        const promiseLike: PromiseLike<number> = { then: (resolve) => Promise.resolve(99).then(resolve) };
+        expect(await run(notThrowable).onFailAsync(() => promiseLike)).toEqual(1);
+    });
 });
