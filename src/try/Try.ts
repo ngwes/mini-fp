@@ -12,7 +12,7 @@ export class Try<T> {
     }
   }
   
- static async runAsync<T>(fn: () => Promise<T>): Promise<Try<T>> {
+ static async runAsync<T>(fn: () => PromiseLike<T>): Promise<Try<T>> {
     try {
       return new Try(await fn(), null);
     } catch (err) {
