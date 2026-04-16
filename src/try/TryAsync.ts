@@ -7,7 +7,7 @@ export class TryAsync<T> implements PromiseLike<Try<T>> {
     return new TryAsync(Try.runAsync(fn));
   }
 
-  onFailAsync(handler: (error: unknown) => Promise<T>): Promise<T> {
+  onFailAsync(handler: (error: unknown) => PromiseLike<T>): Promise<T> {
     return this.internal.then(result =>
       result.onFailAsync(handler)
     );

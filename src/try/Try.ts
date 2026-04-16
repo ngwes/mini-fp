@@ -34,9 +34,9 @@ export class Try<T> {
     return this.value!
   }
 
-  onFailAsync(fn: (error: unknown) => Promise<T>): Promise<T> {
+  onFailAsync(fn: (error: unknown) => PromiseLike<T>): Promise<T> {
     if(this.isFailure())
-        return fn(this.error)
+        return Promise.resolve(fn(this.error))
     return Promise.resolve(this.value!)
   }
 }
