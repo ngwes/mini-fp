@@ -431,9 +431,9 @@ Try.run(() => 42).isSuccess();            // true
 Try.run(() => { throw new Error() }).isFailure(); // true
 ```
 
-### Handling failures: `onFailAsync` and `onFailAsyncAsync`
+### Handling failures: `onFail` and `onFailAsync`
 
-`onFailAsync` is the primary recovery method. It returns the success value directly, or calls your handler with the error:
+`onFail` is the synchronous recovery method. `onFailAsync` is its async counterpart and accepts any `PromiseLike<T>` — including `EitherAsync<L, T>` when `T` is `Either<L, R>`. Both return the success value directly, or call your handler with the error:
 
 ```typescript
 // Returns 42 on success
@@ -1110,18 +1110,18 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 | | Signature | Description |
 |---|---|---|
 | `Try.run` | `run<T>(fn: () => T): Try<T>` | Runs a sync function, catches exceptions |
-| `Try.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches exceptions — returns `TryAsync` |
+| `Try.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Runs an async function (or any `PromiseLike`), catches exceptions — returns `TryAsync` |
 | `.isSuccess()` | `(): boolean` | `true` if no exception was thrown |
 | `.isFailure()` | `(): boolean` | `true` if an exception was caught |
-| `.onFailAsync()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
-| `.onFailAsyncAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Async failure handler |
+| `.onFail()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
+| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Async failure handler — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
 
 ### `TryAsync<T>`
 
 | | Signature | Description |
 |---|---|---|
 | `TryAsync.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches throws and rejections |
-| `.onFailAsync()` | `(fn: (error: unknown) => Promise<T>): Promise<T>` | Returns the value on success, calls async handler on failure |
+| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Returns the value on success, calls async handler on failure — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
 | `.then()` | `PromiseLike.then` | Allows `await` interop — resolves to `Try<T>` |
 
 ### `Validate<L, R>`
