@@ -1,3 +1,10 @@
+## [1.4.1](https://gitlab.com/ngwes/mini-fp/compare/v1.4.0...v1.4.1) (2026-05-24)
+
+
+### Bug Fixes
+
+* exported missing types ([420394e](https://gitlab.com/ngwes/mini-fp/commit/420394e7f358c3187135048ad012ee12b9bef4c2))
+
 # [1.4.0](https://gitlab.com/nadir.gherbi1/mini-fp/compare/v1.3.0...v1.4.0) (2026-04-16)
 
 
