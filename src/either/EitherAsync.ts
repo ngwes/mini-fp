@@ -15,6 +15,12 @@ export class EitherAsync<L, R> implements PromiseLike<Either<L, R>> {
     return new EitherAsync(Promise.resolve(Either.left<L, R>(value)));
   }
 
+  public mapAsync<U>(fn: (value: R) => Promise<U>): EitherAsync<L, U> {
+    return new EitherAsync<L, U>(
+      this.promise.then(e => e.mapAsync(fn))
+    );
+  }
+
   public bindAsync<U>(fn: (value: R) => Promise<Either<L, U>>): EitherAsync<L, U>;
   public bindAsync<U>(fn: (value: R) => EitherAsync<L, U>): EitherAsync<L, U>;
   public bindAsync<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>;

@@ -290,4 +290,37 @@ describe("Either", () => {
       .unwrapRight(),
     ).toEqual("2");
   });
+
+  it("EitherAsync.mapAsync transforms right value", async () => {
+    expect((await
+      EitherAsync.right<ErrorResult, number>(2)
+        .mapAsync(async x => x * 3))
+      .unwrapRight(),
+    ).toEqual(6);
+  });
+
+  it("EitherAsync.mapAsync short-circuits on left", async () => {
+    expect((await
+      EitherAsync.left<ErrorResult, number>(ErrorResult.with("code", "message"))
+        .mapAsync(async x => x * 3))
+      .isLeft(),
+    ).toEqual(true);
+  });
+
+  it("EitherAsync.mapAsync chains with bindAsync", async () => {
+    expect((await
+      EitherAsync.right<ErrorResult, number>(2)
+        .mapAsync(async x => x * 2)
+        .bindAsync(x => EitherAsync.right<ErrorResult, string>(x.toString())))
+      .unwrapRight(),
+    ).toEqual("4");
+  });
+
+  it("EitherAsync.mapAsync does not unwrap when right — maps to plain value not Either", async () => {
+    expect((await
+      EitherAsync.right<ErrorResult, string>("hello")
+        .mapAsync(async s => s.length))
+      .unwrapRight(),
+    ).toEqual(5);
+  });
 });
