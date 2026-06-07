@@ -1,3 +1,5 @@
+import { Either } from "../either/Either.js";
+import { EitherAsync } from "../either/EitherAsync.js";
 import { Try } from "./Try.js";
 
 export class TryAsync<T> implements PromiseLike<Try<T>> {
@@ -7,10 +9,11 @@ export class TryAsync<T> implements PromiseLike<Try<T>> {
     return new TryAsync(Try.runAsync(fn));
   }
 
-  onFailAsync(handler: (error: unknown) => PromiseLike<T>): Promise<T> {
-    return this.internal.then(result =>
-      result.onFailAsync(handler)
-    );
+  onFailAsync<L, R>(handler: (error: unknown) => PromiseLike<Either<L, R>>): EitherAsync<L, R>;
+  onFailAsync(handler: (error: unknown) => PromiseLike<T>): Promise<T>;
+  onFailAsync(handler: (error: unknown) => PromiseLike<any>): Promise<any> | EitherAsync<any, any> {
+    const resultPromise = this.internal.then(result => result.onFailAsync(handler));
+    return EitherAsync.from(resultPromise as Promise<Either<any, any>>);
   }
 
   then<TResult1 = Try<T>, TResult2 = never>(

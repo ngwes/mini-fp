@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TryAsync } from "../src";
+import { Either, EitherAsync, TryAsync, asTask } from "../src";
 
 const { runAsync } = TryAsync;
 
@@ -40,5 +40,34 @@ describe("TryAsync", () => {
     it("onFailAsync accepts a PromiseLike handler on success", async () => {
         const promiseLike: PromiseLike<number> = { then: (resolve) => Promise.resolve(99).then(resolve) };
         expect(await runAsync(success).onFailAsync(() => promiseLike)).toEqual(1);
+    });
+
+    it("onFailAsync returns EitherAsync on success when handler returns Either", async () => {
+        const result = await runAsync(async () => Either.right<Error, number>(1))
+            .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)));
+        expect(result.isRight()).toEqual(true);
+        expect(result.unwrapRight()).toEqual(1);
+    });
+
+    it("onFailAsync returns EitherAsync from handler on failure when handler returns Either", async () => {
+        const result = await runAsync<Either<Error, number>>(() => { throw new Error("fail"); })
+            .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)));
+        expect(result.isLeft()).toEqual(true);
+    });
+
+    it("onFailAsync with Either handler chains mapAsync and bindAsync", async () => {
+        const result = await runAsync(async () => Either.right<Error, number>(2))
+            .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)))
+            .mapAsync(async x => x * 2)
+            .bindAsync(x => EitherAsync.right<Error, string>(x.toString()));
+        expect(result.unwrapRight()).toEqual("4");
+    });
+
+    it("onFailAsync with Either handler short-circuits mapAsync on left", async () => {
+        const result = await runAsync<Either<Error, number>>(() => { throw new Error("fail"); })
+            .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)))
+            .mapAsync(async x => x * 2)
+            .bindAsync(x => EitherAsync.right<Error, string>(x.toString()));
+        expect(result.isLeft()).toEqual(true);
     });
 });
