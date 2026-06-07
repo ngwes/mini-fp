@@ -1,3 +1,10 @@
+# [1.5.0](https://gitlab.com/ngwes/mini-fp/compare/v1.4.1...v1.5.0) (2026-06-07)
+
+
+### Features
+
+* add more overload to help the fluent interface ([4efe5b9](https://gitlab.com/ngwes/mini-fp/commit/4efe5b9749196ab4b6c757abe765d7915f9ef0e4))
+
 ## [1.4.1](https://gitlab.com/ngwes/mini-fp/compare/v1.4.0...v1.4.1) (2026-05-24)
 
 
