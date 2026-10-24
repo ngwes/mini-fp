@@ -4,6 +4,10 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 
 **Zero production dependencies.**
 
+<!-- docs-site:skip-start -->
+**Documentation:** <https://ngwes.github.io/mini-fp/>
+<!-- docs-site:skip-end -->
+
 ---
 
 ## Table of Contents
