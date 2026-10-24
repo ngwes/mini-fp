@@ -40,7 +40,7 @@ npm i @ngwes/mini-fp
 ## Quick Start
 
 ```typescript
-import { Option, Either, Try, Validate, traverseOption } from 'mini-fp';
+import { Option, Either, Try, Validate, traverseOption } from '@ngwes/mini-fp';
 
 const { some, none, from } = Option;
 const { left, right } = Either;
@@ -59,7 +59,7 @@ Each type is a plain class with static constructors. You can call static methods
 ### Constructors
 
 ```typescript
-import { Option } from 'mini-fp';
+import { Option } from '@ngwes/mini-fp';
 const { some, none, from } = Option;
 
 // some: wraps a non-null value (throws if null/undefined is passed)
@@ -182,7 +182,7 @@ none().unwrap();     // throws Error
 Every operation has an `Async` counterpart:
 
 ```typescript
-import { Option } from 'mini-fp';
+import { Option } from '@ngwes/mini-fp';
 
 // FromAsync: wraps a nullable Promise
 const user = await Option.FromAsync(db.findUser(id)); // Promise<Option<User>>
@@ -244,7 +244,7 @@ getCity("u1").orElse("Unknown city");
 ### Constructors
 
 ```typescript
-import { Either } from 'mini-fp';
+import { Either } from '@ngwes/mini-fp';
 const { left, right } = Either;
 
 const ok  = right<string, number>(42);          // Either<string, number>
@@ -413,7 +413,7 @@ result.match(
 ### Constructors
 
 ```typescript
-import { Try } from 'mini-fp';
+import { Try } from '@ngwes/mini-fp';
 const { run, runAsync } = Try;
 
 // run: executes a synchronous function, catches any throw
@@ -475,7 +475,7 @@ parseConfig("not valid json {{");
 ### Worked example: wrapping unreliable third-party code
 
 ```typescript
-import { Try } from 'mini-fp';
+import { Try } from '@ngwes/mini-fp';
 
 const readConfigFile = async (path: string): Promise<string> => {
   const result = await Try.runAsync(() => fs.promises.readFile(path, "utf-8"));
@@ -489,7 +489,7 @@ const readConfigFile = async (path: string): Promise<string> => {
 ### Worked example: converting exceptions to Either
 
 ```typescript
-import { Try, Either } from 'mini-fp';
+import { Try, Either } from '@ngwes/mini-fp';
 const { left, right } = Either;
 
 const tryToEither = <T>(fn: () => T): Either<Error, T> => {
@@ -509,7 +509,7 @@ const tryToEither = <T>(fn: () => T): Either<Error, T> => {
 ### Constructor
 
 ```typescript
-import { TryAsync } from 'mini-fp';
+import { TryAsync } from '@ngwes/mini-fp';
 
 const result = TryAsync.runAsync(() => fetch(url).then(r => r.json()));
 ```
@@ -540,7 +540,7 @@ t.isSuccess(); // true / false
 ### Worked example: fetching with fallback
 
 ```typescript
-import { TryAsync } from 'mini-fp';
+import { TryAsync } from '@ngwes/mini-fp';
 
 const fetchConfig = (url: string): Promise<Config> =>
   TryAsync.runAsync(() => fetch(url).then(r => r.json()))
@@ -559,7 +559,7 @@ const fetchConfig = (url: string): Promise<Config> =>
 ### Constructors
 
 ```typescript
-import { Validate } from 'mini-fp';
+import { Validate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 const ok  = valid<string, number>(42);       // Validate<string, number>
@@ -615,7 +615,7 @@ invalid(["oops"]).unwrap();       // throws
 ### Worked example: form field validation
 
 ```typescript
-import { Validate } from 'mini-fp';
+import { Validate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 type FieldError = { field: string; message: string };
@@ -658,7 +658,7 @@ if (result.isInvalid()) {
 ### Worked example: validating a DTO before persistence
 
 ```typescript
-import { Validate } from 'mini-fp';
+import { Validate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 interface CreateUserDto { username: string; password: string; email: string }
@@ -703,7 +703,7 @@ result.match(
 `Unit` represents the absence of a meaningful return value — the functional equivalent of `void`. It avoids polluting your types with `void` in generic contexts.
 
 ```typescript
-import { Unit } from 'mini-fp';
+import { Unit } from '@ngwes/mini-fp';
 
 // Use when an operation succeeds but has nothing to return
 const performSideEffect = (): Either<string, Unit> => {
@@ -732,7 +732,7 @@ Traversal functions flip a collection of monadic values into a single monad cont
 Converts `Option<T>[]` → `Option<T[]>`. Returns `none` as soon as any element is `none`.
 
 ```typescript
-import { Option, traverseOption } from 'mini-fp';
+import { Option, traverseOption } from '@ngwes/mini-fp';
 const { some, none, from } = Option;
 
 traverseOption([some(1), some(2), some(3)]); // some([1, 2, 3])
@@ -752,7 +752,7 @@ getRequiredEnvVars(["DB_HOST", "DB_PORT", "API_KEY"]);
 Converts `Option<Promise<T>>[]` → `Promise<Option<T[]>>`. Awaits all inner promises.
 
 ```typescript
-import { Option, traverseOptionAsync } from 'mini-fp';
+import { Option, traverseOptionAsync } from '@ngwes/mini-fp';
 const { some, none } = Option;
 
 const results = await traverseOptionAsync([
@@ -773,7 +773,7 @@ const withMissing = await traverseOptionAsync([
 Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered.
 
 ```typescript
-import { Either, traverseEither } from 'mini-fp';
+import { Either, traverseEither } from '@ngwes/mini-fp';
 const { left, right } = Either;
 
 traverseEither([right(1), right(2), right(3)]); // right([1, 2, 3])
@@ -797,7 +797,7 @@ parseAll(["1", "abc", "3"]); // left('"abc" is not a number')
 Converts `Either<L, Promise<R>>[]` → `Promise<Either<L, R[]>>`.
 
 ```typescript
-import { Either, traverseEitherAsync } from 'mini-fp';
+import { Either, traverseEitherAsync } from '@ngwes/mini-fp';
 const { left, right } = Either;
 
 const results = await traverseEitherAsync([
@@ -818,7 +818,7 @@ const withError = await traverseEitherAsync([
 Converts `Validate<L, R>[]` → `Validate<L, R[]>`. Unlike `traverseEither`, it **does not short-circuit** — all validations run and all errors are collected.
 
 ```typescript
-import { Validate, sequenceValidate } from 'mini-fp';
+import { Validate, sequenceValidate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 // All valid
@@ -844,7 +844,7 @@ sequenceValidate([-1, 2, -3, 4].map(validatePositive));
 ### `sequenceValidateAsync`
 
 ```typescript
-import { sequenceValidateAsync, Validate } from 'mini-fp';
+import { sequenceValidateAsync, Validate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 const result = await sequenceValidateAsync(
@@ -866,7 +866,7 @@ const result = await sequenceValidateAsync(
 Load config from environment, fall back to file, fall back to defaults.
 
 ```typescript
-import { Option } from 'mini-fp';
+import { Option } from '@ngwes/mini-fp';
 const { from } = Option;
 
 interface AppConfig { dbUrl: string; port: number; logLevel: string }
@@ -909,7 +909,7 @@ const loadConfig = async (): Promise<AppConfig> => {
 Validate input, check for duplicates, hash the password, persist — each step can fail with a typed error.
 
 ```typescript
-import { Either, Try } from 'mini-fp';
+import { Either, Try } from '@ngwes/mini-fp';
 const { left, right } = Either;
 
 type RegistrationError =
@@ -973,7 +973,7 @@ result.match(
 Process a list of items and collect all failures, without stopping on the first one.
 
 ```typescript
-import { Validate, sequenceValidate } from 'mini-fp';
+import { Validate, sequenceValidate } from '@ngwes/mini-fp';
 const { valid, invalid } = Validate;
 
 interface ProductRow { sku: string; price: string; stock: string }
@@ -1020,7 +1020,7 @@ if (outcome.isInvalid()) {
 ### Recipe 4: Optional chaining across async boundaries
 
 ```typescript
-import { Option } from 'mini-fp';
+import { Option } from '@ngwes/mini-fp';
 
 const getRecommendations = async (sessionToken: string | null): Promise<string[]> => {
   return Option.from(sessionToken)
@@ -1153,7 +1153,7 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 ### `Unit`
 
 ```typescript
-import { Unit } from 'mini-fp';
+import { Unit } from '@ngwes/mini-fp';
 Unit.default; // the singleton Unit value
 ```
 
