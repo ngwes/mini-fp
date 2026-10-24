@@ -1,6 +1,6 @@
 {
   "name": "@ngwes/mini-fp",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A minimal TypeScript functional programming library: Option, Either, Try, Validate and their async variants, with zero dependencies.",
   "repository": {
     "type": "git",

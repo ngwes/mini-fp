@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/ngwes/mini-fp/compare/v1.5.0...v1.5.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* add the package description, keywords and author ([30ad052](https://github.com/ngwes/mini-fp/commit/30ad052d5910177cda7b5901211313419b48f7d2))
+
 # [1.5.0](https://gitlab.com/ngwes/mini-fp/compare/v1.4.1...v1.5.0) (2026-06-07)
 
 
