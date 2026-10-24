@@ -2,6 +2,14 @@
   "name": "@ngwes/mini-fp",
   "version": "1.5.0",
   "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ngwes/mini-fp.git"
+  },
+  "homepage": "https://github.com/ngwes/mini-fp#readme",
+  "bugs": {
+    "url": "https://github.com/ngwes/mini-fp/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
