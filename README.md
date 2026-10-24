@@ -9,6 +9,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 ## Table of Contents
 
 - [Installation](#installation)
+- [Agent Skills](#agent-skills)
 - [Quick Start](#quick-start)
 - [Option\<T\>](#optiont)
 - [Either\<L, R\>](#eitherl-r)
@@ -34,6 +35,21 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 ```bash
 npm i @ngwes/mini-fp
 ```
+
+---
+
+## Agent Skills
+
+[`mini-fp-skills`](https://github.com/ngwes/mini-fp-skills) is a Claude Code plugin with skills that teach coding agents how to use this library: a router skill, a reference skill for each type (`Option`, `Either`, `Try`, `Validate`, utilities) and pattern skills for typed error handling, validation and async pipelines.
+
+Install it from within Claude Code:
+
+```text
+/plugin marketplace add ngwes/mini-fp-skills
+/plugin install mini-fp@mini-fp-skills
+```
+
+See the [mini-fp-skills README](https://github.com/ngwes/mini-fp-skills#readme) for the other install options and for how to point your agent at the skills.
 
 ---
 
