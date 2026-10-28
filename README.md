@@ -829,6 +829,41 @@ valid<string, number>(10)
 // valid(10)
 ```
 
+### Working with errors: `mapInvalid` and `bindInvalid`
+
+`mapInvalid` transforms each error. `bindInvalid` receives the whole error array and returns a new `Validate`, so it can recover or replace the errors. Both leave a `valid` untouched:
+
+```typescript
+// mapInvalid — transform every error
+invalid<string, number>(["a", "bb"]).mapInvalid(e => e.length).unwrapInvalid(); // [1, 2]
+valid<string, number>(5).mapInvalid(e => e.length);                             // valid(5)
+
+// bindInvalid — recover from the errors, or turn them into new ones
+invalid<string, number>(["missing"]).bindInvalid(_errors => valid(0));          // valid(0)
+invalid<string, number>(["a", "b"])
+  .bindInvalid(errors => invalid([`${errors.length} errors`]));                  // invalid(["2 errors"])
+```
+
+### Pattern matching: `match` and `matchAsync`
+
+`match` calls `onValid` with the value or `onInvalid` with the errors. Either handler can also be a plain value; a function is only called on its own branch:
+
+```typescript
+valid<string, number>(42).match(n => `got ${n}`, errors => errors.join(", ")); // "got 42"
+invalid<string, number>(["required"]).match(n => `got ${n}`, errors => errors.join(", ")); // "required"
+valid<string, number>(42).match("ok", "ko");                                    // "ok"
+```
+
+`matchAsync` returns a `Promise`. Each handler can be a sync or async function, or a `PromiseLike` value:
+
+```typescript
+await valid<string, number>(42).matchAsync(async n => n * 2, Promise.resolve(0)); // 84
+await invalid<string, number>(["e"]).matchAsync(n => n * 2, async errors => {
+  await logErrors(errors);
+  return 0;
+});                                                                              // 0
+```
+
 ### Combining: `combine` and `combineAsync`
 
 This is the key feature of `Validate`. When both sides are invalid, **all errors are merged**:
@@ -1449,6 +1484,10 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `.unwrapInvalid()` | `(): L[]` | Returns errors; throws if valid |
 | `.map()` | `<U>(fn: (v: R) => U): Validate<L, U>` | Transforms the valid value |
 | `.bind()` | `<U>(fn: (v: R) => Validate<L, U>): Validate<L, U>` | Chains on valid |
+| `.mapInvalid()` | `<U>(fn: (error: L) => U): Validate<U, R>` | Transforms each error |
+| `.bindInvalid()` | `<U>(fn: (errors: L[]) => Validate<U, R>): Validate<U, R>` | Chains on invalid with the whole error array; can recover |
+| `.match()` | `<U>(onValid: ((v: R) => U) \| U, onInvalid: ((errors: L[]) => U) \| U): U` | Pattern match on valid/invalid; each handler can be a function or a plain value |
+| `.matchAsync()` | `<U>(onValid: ((v: R) => U \| PromiseLike<U>) \| PromiseLike<U>, onInvalid: ((errors: L[]) => U \| PromiseLike<U>) \| PromiseLike<U>): Promise<U>` | Async pattern match; each handler can be a sync or async function, or a `PromiseLike` |
 | `.combine()` | `(other: Validate<L, R>): Validate<L, R>` | Merges two validations, accumulating errors |
 | `.combineAsync()` | `(other: Promise<Validate<L, R>>): Promise<Validate<L, R>>` | Async combine |
 
