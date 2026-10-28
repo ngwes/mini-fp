@@ -181,6 +181,71 @@ none<string>().orElse(() => computeExpensiveDefault()); // result of factory
 const user = from(sessionUser).orElse(guestUser);
 ```
 
+### Filtering: `filter`
+
+`filter` keeps `some` only when the predicate holds; otherwise it returns `none`.
+
+```typescript
+some(4).filter(x => x > 2);         // some(4)
+some(1).filter(x => x > 2);         // none
+none<number>().filter(() => true);  // none
+```
+
+### Side effects: `onSome` and `onNone`
+
+`onSome` and `onNone` run an action on one branch and return the same option, so the chain continues unchanged.
+
+```typescript
+from(user)
+  .onSome(u => logger.info(`found ${u.name}`))
+  .onNone(() => logger.warn("user not found"))
+  .map(u => u.email);
+```
+
+### Recovering from `none`: `mapNone` and `bindNone`
+
+`mapNone` replaces `none` with a produced value (wrapped with `Option.from`, so a `null`/`undefined` result stays `none`). `bindNone` replaces `none` with a produced `Option`. Both leave `some` untouched and never call the function on `some`.
+
+```typescript
+none<number>().mapNone(() => 7);              // some(7)
+some(1).mapNone(() => 7);                     // some(1)
+
+from(cache.get(key)).bindNone(() => from(db.get(key))); // cache first, then the database
+```
+
+### Converting to Either: `toEither`
+
+`toEither` turns `some` into `right` and `none` into `left`. The left value can be a plain value or a factory, which is called only on `none`.
+
+```typescript
+some(1).toEither("missing");                           // right(1)
+none<number>().toEither("missing");                    // left("missing")
+from(user).toEither(() => new NotFoundError(userId));  // factory runs only on none
+```
+
+### Guards: `guardMap` and `guardBind`
+
+A `Guard<T, U>` is a `[when, then]` pair. `guardMap` applies the `then` of the first guard whose `when` holds, or `otherwise` when no guard matches. `guardBind` does the same with functions that return an `Option`. On `none`, no guard is evaluated.
+
+```typescript
+import type { Guard } from '@ngwes/mini-fp';
+
+const large: Guard<number, string> = [x => x > 3, () => "large"];
+
+some(5).guardMap(
+  x => "small",
+  large,
+  [x => x > 1, () => "medium"],
+);                                   // some("large")
+
+some(0).guardMap(x => "small", [x => x > 3, () => "large"]); // some("small")
+
+some(5).guardBind(
+  x => some("small"),
+  [x => x > 3, () => none<string>()],
+);                                   // none
+```
+
 ### Unwrapping
 
 Only unwrap when you have already confirmed the option is `some`:
@@ -225,7 +290,7 @@ const result = await from(sessionToken)
 // Also accepts a Promise<Option<U>> directly
 const fromPromise = await from(value).bindAsync(fetchOptionFromSomewhere());
 
-// matchAsync
+// matchAsync — each handler may be sync or async
 const response = await from(user).matchAsync(
   async u  => ({ status: 200, body: u }),
   async () => ({ status: 404, body: "Not found" })
@@ -1077,9 +1142,17 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.bind()` | `<U>(fn: (v: T) => Option<U>): Option<U>` | Chains `Option`-returning functions |
 | `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Async bind; returns chainable `OptionAsync` |
 | `.match()` | `<U>(onSome, onNone): U` | Pattern match on `some`/`none` |
-| `.matchAsync()` | `<U>(onSome, onNone): Promise<U>` | Async pattern match |
+| `.matchAsync()` | `<U>(onSome: (v: T) => U \| PromiseLike<U>, onNone: () => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 | `.orElse()` | `(defaultValue: T \| (() => T)): T` | Returns value or fallback |
 | `.orElseAsync()` | `(defaultValue: Promise<T> \| (() => Promise<T>)): Promise<T>` | Async fallback |
+| `.filter()` | `(predicate: (v: T) => boolean): Option<T>` | Keeps `some` only when the predicate holds |
+| `.onSome()` | `(action: (v: T) => void): Option<T>` | Runs the action on `some`; returns the same option |
+| `.onNone()` | `(action: () => void): Option<T>` | Runs the action on `none`; returns the same option |
+| `.mapNone()` | `(fn: () => T): Option<T>` | Replaces `none` with `Option.from(fn())` |
+| `.bindNone()` | `(fn: () => Option<T>): Option<T>` | Replaces `none` with the produced option |
+| `.toEither()` | `<L>(left: L \| (() => L)): Either<L, T>` | `some` becomes `right`, `none` becomes `left`; a factory is called only on `none` |
+| `.guardMap()` | `<U>(otherwise: (v: T) => U, ...guards: Guard<T, U>[]): Option<U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `none` |
+| `.guardBind()` | `<U>(otherwise: (v: T) => Option<U>, ...guards: Guard<T, Option<U>>[]): Option<U>` | Binds with the first matching guard, else `otherwise`; no guard runs on `none` |
 
 ### `Either<L, R>`
 

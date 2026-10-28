@@ -1,3 +1,7 @@
+import { Either } from "../either/Either.js";
+import { pickGuard } from "../utils/guard.js";
+import type { Guard } from "../utils/guard.js";
+
 export class OptionAsync<T> implements PromiseLike<Option<T>> {
     private constructor(private readonly promise: Promise<Option<T>>) {}
 
@@ -100,10 +104,47 @@ export class Option<T>{
         return this.isSome()? onSome(this.value!) : onNone();
     }
 
-    matchAsync<U>(
-        onSome: (value: T) => Promise<U>,
-        onNone: () => Promise<U>) : Promise<U>{
+    async matchAsync<U>(
+        onSome: (value: T) => U | PromiseLike<U>,
+        onNone: () => U | PromiseLike<U>) : Promise<U>{
         return this.isSome()? onSome(this.value!) : onNone();
+    }
+
+    filter(predicate: (value: T) => boolean) : Option<T>{
+        return this.isSome() && predicate(this.value!)? this : Option.none<T>();
+    }
+
+    onSome(action: (value: T) => void) : Option<T>{
+        if(this.isSome()) action(this.value!);
+        return this;
+    }
+
+    onNone(action: () => void) : Option<T>{
+        if(this.isNone()) action();
+        return this;
+    }
+
+    mapNone(fn: () => T) : Option<T>{
+        return this.isSome()? this : Option.from(fn());
+    }
+
+    bindNone(fn: () => Option<T>) : Option<T>{
+        return this.isSome()? this : fn();
+    }
+
+    toEither<L>(left: L | (() => L)) : Either<L, T>{
+        if(this.isSome())
+            return Either.right<L, T>(this.value!);
+
+        return Either.left<L, T>(typeof left === 'function' ? (left as (() => L))() : left);
+    }
+
+    guardMap<U>(otherwise: (value: T) => U, ...guards: Guard<T, U>[]) : Option<U>{
+        return this.map(value => pickGuard(value, otherwise, guards)(value));
+    }
+
+    guardBind<U>(otherwise: (value: T) => Option<U>, ...guards: Guard<T, Option<U>>[]) : Option<U>{
+        return this.bind(value => pickGuard(value, otherwise, guards)(value));
     }
 
     orElse(onNone: () => T) : T;

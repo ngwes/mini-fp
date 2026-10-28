@@ -7,6 +7,7 @@ export * from "./either/EitherAsync.js";
 export * from "./either/traverse.js";
 export * from "./either/traverse.async.js";
 export * from "./utils/promise.utils.js";
+export type { Guard } from "./utils/guard.js";
 
 export * from "./try/Try.js";
 export * from "./try/TryAsync.js";

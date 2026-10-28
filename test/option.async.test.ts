@@ -35,6 +35,11 @@ describe("Option", () => {
         expect((await none<number>().matchAsync(x => Promise.resolve(x), () => Promise.resolve(4)))).toEqual(4);
     });
 
+    it("matchAsync accepts sync and async handlers", async () => {
+        expect(await Some(2).matchAsync(x => x * 2, async () => 0)).toEqual(4);
+        expect(await none<number>().matchAsync(async x => x, () => 9)).toEqual(9);
+    });
+
     it("Runs orElse Some correctly", async () => {
         expect((await Some<number>(2).orElseAsync(() => Promise.resolve(4)))).toEqual(2);
     });
