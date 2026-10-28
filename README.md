@@ -97,8 +97,8 @@ const e = from("hello");      // some("hello")
 const h = from(-1, n => n < 0);   // none
 const i = from(5,  n => n < 0);   // some(5)
 
-// FromAsync: awaits a Promise, then applies from
-const f = await Option.FromAsync(fetchUserOrNull(id)); // Promise<Option<User>>
+// fromAsync: awaits a Promise, then applies from; returns a chainable OptionAsync
+const f = await Option.fromAsync(fetchUserOrNull(id)); // Option<User>
 ```
 
 ### Checking the state
@@ -264,31 +264,39 @@ none().unwrap();     // throws Error
 
 ### Async API
 
-Every operation has an `Async` counterpart:
+`fromAsync`, `mapAsync`, `bindAsync`, `mapNoneAsync`, `bindNoneAsync`, `guardMapAsync` and `guardBindAsync` return an `OptionAsync<T>`. It wraps a `Promise<Option<T>>`, has the same methods as `Option` (`map`, `bind`, `filter`, `onSome`, `toEither`, ...) and can be awaited to get the `Option` back, so a pipeline mixes sync and async steps without any `.then()`. On `none`, the later steps are skipped; if a callback throws, the awaited result rejects.
 
 ```typescript
-import { Option } from '@ngwes/mini-fp';
+import { Option, OptionAsync } from '@ngwes/mini-fp';
 
-// FromAsync: wraps a nullable Promise
-const user = await Option.FromAsync(db.findUser(id)); // Promise<Option<User>>
+// fromAsync: wraps a nullable Promise
+const user = await Option.fromAsync(db.findUser(id)); // Option<User>
 
 // mapAsync
 const upper = await from("hello").mapAsync(async s => s.toUpperCase());
 // some("HELLO")
 
-// bindAsync — returns OptionAsync<U>, which is chainable and awaitable
+// bindAsync: the function may return a Promise<Option<U>> or an OptionAsync<U>
 const profile = await from(userId).bindAsync(async id => {
   const row = await db.query("SELECT * FROM profiles WHERE id = ?", [id]);
   return from(row ?? null); // none if not found
 });
 
-// Chain multiple async steps directly — no .then() unwrapping needed
-const result = await from(sessionToken)
-  .bindAsync(async token => from(await auth.validateToken(token)))
-  .bindAsync(async id   => from(await db.users.findById(id)));
+// Chain sync and async steps directly — no .then() unwrapping needed
+const email = await Option.fromAsync(db.findUser(id))
+  .filter(u => u.active)
+  .bindAsync(u => Option.fromAsync(db.findProfile(u.id)))
+  .map(p => p.email)
+  .orElse("unknown"); // Promise<string>
 
-// Also accepts a Promise<Option<U>> directly
+// bindAsync also accepts a Promise<Option<U>> directly
 const fromPromise = await from(value).bindAsync(fetchOptionFromSomewhere());
+
+// mapNoneAsync / bindNoneAsync: recover from none asynchronously
+const cached = await from(cache.get(key)).bindNoneAsync(() => Option.fromAsync(db.get(key)));
+
+// OptionAsync.some / OptionAsync.none: already-resolved wrappers
+const start = OptionAsync.some(42);
 
 // matchAsync — each handler may be sync or async
 const response = await from(user).matchAsync(
@@ -302,6 +310,8 @@ const config = await from(process.env.API_URL).orElseAsync(async () => {
   return val;
 });
 ```
+
+On an `OptionAsync`, `match`, `matchAsync`, `orElse` and `orElseAsync` return a `Promise` of the plain value, and `toEither` returns an `EitherAsync`.
 
 ### Worked example: safe navigation through nested objects
 
@@ -967,7 +977,7 @@ const fromEnv = (): Option<AppConfig> => {
 };
 
 const fromFile = async (): Promise<Option<AppConfig>> => {
-  const text = await Option.FromAsync(
+  const text = await Option.fromAsync(
     import("fs/promises").then(fs =>
       fs.readFile("config.json", "utf-8").catch(() => null)
     )
@@ -1117,8 +1127,8 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
       const prefs = await db.preferences.findByUser(id);
       return Option.from(prefs);
     })
-    .then(opt => opt.mapAsync(async prefs => recommendations.forPreferences(prefs)))
-    .then(opt => opt.orElseAsync(async () => recommendations.trending()));
+    .mapAsync(async prefs => recommendations.forPreferences(prefs))
+    .orElseAsync(async () => recommendations.trending());
 };
 ```
 
@@ -1133,26 +1143,30 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `Option.some` | `some<T>(value: T): Option<T>` | Creates `some`; throws if value is `null`/`undefined` |
 | `Option.none` | `none<T>(): Option<T>` | Creates `none` |
 | `Option.from` | `from<T>(value: T \| null \| undefined): Option<T>`<br>`from<T>(value: T, noneWhen: (v: T) => boolean): Option<T>` | Safe constructor from nullable; or use `noneWhen` to treat a value as absent based on a predicate |
-| `Option.FromAsync` | `FromAsync<T>(value: Promise<T> \| null \| undefined): Promise<Option<T>>` | Safe async constructor |
+| `Option.fromAsync` | `fromAsync<T>(value: PromiseLike<T \| null \| undefined> \| null \| undefined): OptionAsync<T>` | Safe async constructor; returns chainable `OptionAsync` |
 | `.isSome()` | `(): boolean` | `true` if value is present |
 | `.isNone()` | `(): boolean` | `true` if no value |
 | `.unwrap()` | `(): T` | Returns value; throws if `none` |
 | `.map()` | `<U>(fn: (v: T) => U): Option<U>` | Transforms the inner value |
-| `.mapAsync()` | `<U>(fn: (v: T) => Promise<U>): Promise<Option<U>>` | Async map |
+| `.mapAsync()` | `<U>(fn: (v: T) => PromiseLike<U>): OptionAsync<U>` | Async map; returns chainable `OptionAsync` |
 | `.bind()` | `<U>(fn: (v: T) => Option<U>): Option<U>` | Chains `Option`-returning functions |
-| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Async bind; returns chainable `OptionAsync` |
+| `.bindAsync()` | `<U>(fn: (v: T) => PromiseLike<Option<U>>): OptionAsync<U>`<br>`<U>(promise: PromiseLike<Option<U>>): OptionAsync<U>` | Async bind; the function may return an `OptionAsync`; returns chainable `OptionAsync` |
 | `.match()` | `<U>(onSome, onNone): U` | Pattern match on `some`/`none` |
 | `.matchAsync()` | `<U>(onSome: (v: T) => U \| PromiseLike<U>, onNone: () => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 | `.orElse()` | `(defaultValue: T \| (() => T)): T` | Returns value or fallback |
-| `.orElseAsync()` | `(defaultValue: Promise<T> \| (() => Promise<T>)): Promise<T>` | Async fallback |
+| `.orElseAsync()` | `(defaultValue: PromiseLike<T> \| (() => PromiseLike<T>)): Promise<T>` | Async fallback |
 | `.filter()` | `(predicate: (v: T) => boolean): Option<T>` | Keeps `some` only when the predicate holds |
 | `.onSome()` | `(action: (v: T) => void): Option<T>` | Runs the action on `some`; returns the same option |
 | `.onNone()` | `(action: () => void): Option<T>` | Runs the action on `none`; returns the same option |
 | `.mapNone()` | `(fn: () => T): Option<T>` | Replaces `none` with `Option.from(fn())` |
+| `.mapNoneAsync()` | `(fn: () => PromiseLike<T>): OptionAsync<T>` | Async `mapNone`; returns chainable `OptionAsync` |
 | `.bindNone()` | `(fn: () => Option<T>): Option<T>` | Replaces `none` with the produced option |
+| `.bindNoneAsync()` | `(fn: () => PromiseLike<Option<T>>): OptionAsync<T>` | Async `bindNone`; returns chainable `OptionAsync` |
 | `.toEither()` | `<L>(left: L \| (() => L)): Either<L, T>` | `some` becomes `right`, `none` becomes `left`; a factory is called only on `none` |
 | `.guardMap()` | `<U>(otherwise: (v: T) => U, ...guards: Guard<T, U>[]): Option<U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `none` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: T) => PromiseLike<U>, ...guards: Guard<T, PromiseLike<U>>[]): OptionAsync<U>` | Async `guardMap`; returns chainable `OptionAsync` |
 | `.guardBind()` | `<U>(otherwise: (v: T) => Option<U>, ...guards: Guard<T, Option<U>>[]): Option<U>` | Binds with the first matching guard, else `otherwise`; no guard runs on `none` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: T) => PromiseLike<Option<U>>, ...guards: Guard<T, PromiseLike<Option<U>>>[]): OptionAsync<U>` | Async `guardBind`; returns chainable `OptionAsync` |
 
 ### `Either<L, R>`
 
@@ -1177,12 +1191,33 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 
 ### `OptionAsync<T>`
 
-Returned by `Option.bindAsync()`. Wraps a `Promise<Option<T>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+Returned by `Option.fromAsync()` and by the `Async` methods of `Option`. Wraps a `Promise<Option<T>>` and implements `PromiseLike`, so it can be awaited directly or chained further. It mirrors `Option`: each method takes the same parameters and returns an `OptionAsync`, except the terminal methods, which return a `Promise`. On `none`, later callbacks are never called; if a callback throws, the awaited result rejects.
 
 | | Signature | Description |
 |---|---|---|
-| `OptionAsync.from` | `from<T>(promise: Promise<Option<T>>): OptionAsync<T>` | Wraps an existing promise |
-| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Chains on `some`; short-circuits on `none` |
+| `OptionAsync.from` | `from<T>(promise: PromiseLike<Option<T>>): OptionAsync<T>` | Wraps an existing promise |
+| `OptionAsync.some` | `some<T>(value: T): OptionAsync<T>` | Creates an already-resolved `some`; throws if value is `null`/`undefined` |
+| `OptionAsync.none` | `none<T>(): OptionAsync<T>` | Creates an already-resolved `none` |
+| `.map()` | `<U>(fn: (v: T) => U): OptionAsync<U>` | Transforms the inner value |
+| `.mapAsync()` | `<U>(fn: (v: T) => PromiseLike<U>): OptionAsync<U>` | Async map |
+| `.bind()` | `<U>(fn: (v: T) => Option<U>): OptionAsync<U>` | Chains `Option`-returning functions |
+| `.bindAsync()` | `<U>(fn: (v: T) => PromiseLike<Option<U>>): OptionAsync<U>`<br>`<U>(promise: PromiseLike<Option<U>>): OptionAsync<U>` | Chains on `some`; short-circuits on `none`; the function may return an `OptionAsync` |
+| `.filter()` | `(predicate: (v: T) => boolean): OptionAsync<T>` | Keeps `some` only when the predicate holds |
+| `.onSome()` | `(action: (v: T) => void): OptionAsync<T>` | Runs the action on `some` |
+| `.onNone()` | `(action: () => void): OptionAsync<T>` | Runs the action on `none` |
+| `.mapNone()` | `(fn: () => T): OptionAsync<T>` | Replaces `none` with `Option.from(fn())` |
+| `.mapNoneAsync()` | `(fn: () => PromiseLike<T>): OptionAsync<T>` | Async `mapNone` |
+| `.bindNone()` | `(fn: () => Option<T>): OptionAsync<T>` | Replaces `none` with the produced option |
+| `.bindNoneAsync()` | `(fn: () => PromiseLike<Option<T>>): OptionAsync<T>` | Async `bindNone` |
+| `.guardMap()` | `<U>(otherwise: (v: T) => U, ...guards: Guard<T, U>[]): OptionAsync<U>` | Maps with the first matching guard, else `otherwise` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: T) => PromiseLike<U>, ...guards: Guard<T, PromiseLike<U>>[]): OptionAsync<U>` | Async `guardMap` |
+| `.guardBind()` | `<U>(otherwise: (v: T) => Option<U>, ...guards: Guard<T, Option<U>>[]): OptionAsync<U>` | Binds with the first matching guard, else `otherwise` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: T) => PromiseLike<Option<U>>, ...guards: Guard<T, PromiseLike<Option<U>>>[]): OptionAsync<U>` | Async `guardBind` |
+| `.toEither()` | `<L>(left: L \| (() => L)): EitherAsync<L, T>` | `some` becomes `right`, `none` becomes `left`; a factory is called only on `none` |
+| `.match()` | `<U>(onSome: (v: T) => U, onNone: () => U): Promise<U>` | Pattern match on `some`/`none` |
+| `.matchAsync()` | `<U>(onSome: (v: T) => U \| PromiseLike<U>, onNone: () => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
+| `.orElse()` | `(defaultValue: T \| (() => T)): Promise<T>` | Resolves to the value or the fallback |
+| `.orElseAsync()` | `(defaultValue: PromiseLike<T> \| (() => PromiseLike<T>)): Promise<T>` | Resolves to the value or the async fallback |
 | `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `EitherAsync<L, R>`
@@ -1258,7 +1293,7 @@ Unit.default; // the singleton Unit value
 
 - **Right-biased Either** — `map` and `bind` operate on the right (success) side by default; `mapLeft`/`bindLeft` let you work on the left side when needed.
 - **Fail-fast vs. error-harvesting** — `Either` and `Option` short-circuit on the first failure; `Validate` accumulates all failures. Choose based on whether you want to stop early or report everything.
-- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `from` and `FromAsync` which are the safe entry points). Once inside a monad, the value is guaranteed non-null.
+- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `from` and `fromAsync` which are the safe entry points). Once inside a monad, the value is guaranteed non-null.
 - **Async transparency** — every synchronous operation has an `Async` counterpart with the same semantics, so you can mix sync and async pipelines freely.
 
 ---
