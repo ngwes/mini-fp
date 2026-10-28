@@ -678,7 +678,7 @@ import { Try } from '@ngwes/mini-fp';
 
 const readConfigFile = (path: string): Promise<string> =>
   Try.runAsync(() => fs.promises.readFile(path, "utf-8"))
-    .onFailAsync(async err => {
+    .onFail(async err => {
       console.warn(`Could not read ${path}:`, err);
       return "{}";
     });
@@ -699,33 +699,88 @@ const tryToEither = <T>(fn: () => T): Either<Error, T> =>
 
 ## TryAsync\<T\>
 
-`TryAsync<T>` is the async counterpart of `Try<T>`. It wraps an async computation that might throw or return a rejected promise, and provides a fluent `.onFailAsync()` method so you can handle the error in a single expression — no `await` + separate `then` needed.
+`TryAsync<T>` is the async counterpart of `Try<T>`. It wraps an async computation that might throw synchronously or return a rejected promise. Both are failures, and so is any other thrown value, including `null` and `undefined`.
+
+**`TryAsync` is lazy.** `TryAsync.runAsync(fn)` does not call `fn`. Nothing runs until the `TryAsync` is consumed by `await`, `match`, `onFail`, `onFailAsync` or `toEither`, and each consumption runs the function again. Call `memo()` when it should run only once.
 
 ### Constructor
 
 ```typescript
 import { TryAsync } from '@ngwes/mini-fp';
 
-const result = TryAsync.runAsync(() => fetch(url).then(r => r.json()));
+const result = TryAsync.runAsync(() => fetch(url).then(r => r.json())); // nothing runs yet
 ```
 
 `Try.runAsync` also returns a `TryAsync<T>`, so both entry points are equivalent.
 
-### Handling failures: `onFailAsync`
+### Running once: `memo`
 
-`.onFailAsync(handler)` returns the success value directly, or calls your async handler with the error:
+`memo()` returns a `TryAsync` that keeps the first **successful** outcome. Consumers that start while the first run is still pending share it. A failure is not kept: the next consumption calls the function again, so a memoized `TryAsync` retries until it succeeds.
+
+```typescript
+const config = TryAsync.runAsync(() => fetchConfig()).memo();
+
+await config.onFail(defaultConfig); // calls fetchConfig
+await config.onFail(defaultConfig); // reuses the value if the first call succeeded
+```
+
+### Chaining: `bind` and `do`
+
+`bind` chains a function that returns another `TryAsync`. It is lazy, a throw inside the function becomes a failure, and on a failure the function is not called. The result is memoized like `memo()`: once it succeeds, its source is not run again.
+
+`do` runs a side effect on the success value and keeps the value unchanged. It is skipped on failure, and a throw inside the action becomes a failure.
+
+```typescript
+const user = TryAsync.runAsync(() => fetchSession())
+  .bind(session => TryAsync.runAsync(() => fetchUser(session.userId)))
+  .do(u => console.log("loaded", u.id));
+```
+
+### Pattern matching: `match`
+
+`match` runs the `TryAsync` and resolves to `onSuccess(value)` or `onFail(error)`. Both handlers can be sync or async, and `onFail` can also be a plain value:
+
+```typescript
+await TryAsync.runAsync(() => fetchCount()).match(n => `got ${n}`, err => `failed: ${err}`);
+await TryAsync.runAsync(() => fetchCount()).match(async n => n * 2, 0);
+```
+
+### Handling failures: `onFail` and `onFailAsync`
+
+`onFail` resolves to the success value, or to the fallback on failure. The fallback can be a value, a zero-argument factory, or a sync or async function of the error. A function is only called on failure:
 
 ```typescript
 const data = await TryAsync.runAsync(() => fetchRemote())
-  .onFailAsync(async err => {
+  .onFail(async err => {
     await logError(err);
     return fallbackData;
   });
 ```
 
+`onFailAsync` takes an async handler. When the handler returns a `PromiseLike<Either<L, R>>`, the result is an `EitherAsync<L, R>` you can keep chaining. Otherwise the result is a `PromiseLike<T>` to `await`:
+
+```typescript
+const result = await TryAsync.runAsync(async () => Either.right<Error, number>(1))
+  .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)))
+  .map(n => n * 2); // right(2)
+```
+
+### Converting to Either: `toEither`
+
+`toEither` runs the `TryAsync` and returns an `EitherAsync<unknown, T>`: `right(value)` on success, `left(error)` with the thrown error or rejection reason on failure. Use `mapLeft` to turn the error into a typed one:
+
+```typescript
+const message = await TryAsync.runAsync(() => fetchRemote())
+  .toEither()
+  .mapLeft(e => (e as Error).message)
+  .match(() => "ok", m => m);
+```
+
+Like `Try.toEither` (see [Try\<T\>](#tryt)), it rejects when the success value or the thrown value is `null`/`undefined`, because an `Either` cannot hold them.
+
 ### Awaiting the underlying `Try<T>`
 
-`TryAsync<T>` implements `PromiseLike<Try<T>>`, so you can `await` it to get back a `Try<T>` and inspect or transform it manually:
+`TryAsync<T>` implements `PromiseLike<Try<T>>`, so you can `await` it to run it and get back an already evaluated `Try<T>`:
 
 ```typescript
 const t = await TryAsync.runAsync(() => fetchRemote());
@@ -738,8 +793,8 @@ t.isSuccess(); // true / false
 import { TryAsync } from '@ngwes/mini-fp';
 
 const fetchConfig = (url: string): Promise<Config> =>
-  TryAsync.runAsync(() => fetch(url).then(r => r.json()))
-    .onFailAsync(_err => defaultConfig);
+  TryAsync.runAsync(() => fetch(url).then(r => r.json() as Promise<Config>))
+    .onFail(() => defaultConfig);
 ```
 
 ---
@@ -1356,7 +1411,7 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | | Signature | Description |
 |---|---|---|
 | `Try.run` | `run<T>(fn: () => T): Try<T>` | Wraps a sync function lazily; it runs (and exceptions are caught) when the `Try` is consumed |
-| `Try.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Runs an async function (or any `PromiseLike`), catches exceptions — returns `TryAsync` |
+| `Try.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Wraps an async function (or any `PromiseLike`) in a lazy `TryAsync` that catches throws and rejections |
 | `.isSuccess()` | `(): boolean` | Runs the function; `true` if nothing was thrown |
 | `.isFailure()` | `(): boolean` | Runs the function; `true` if anything was thrown (including `null`/`undefined`) |
 | `.memo()` | `(): Try<T>` | Keeps the first successful outcome; a failure runs the function again next time |
@@ -1371,9 +1426,16 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 
 | | Signature | Description |
 |---|---|---|
-| `TryAsync.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches throws and rejections |
-| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Returns the value on success, calls async handler on failure — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
-| `.then()` | `PromiseLike.then` | Allows `await` interop — resolves to `Try<T>` |
+| `TryAsync.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Wraps an async function lazily; it runs (and throws and rejections are caught) when the `TryAsync` is consumed |
+| `.memo()` | `(): TryAsync<T>` | Keeps the first successful outcome; a failure runs the function again next time |
+| `.bind()` | `<U>(fn: (value: T) => TryAsync<U>): TryAsync<U>` | Lazily chains a `TryAsync`-returning function; skipped on failure; memoized |
+| `.do()` | `(action: (value: T) => void): TryAsync<T>` | Runs `action` on the success value and keeps the value; skipped on failure; a throw is a failure |
+| `.match()` | `<U>(onSuccess: (value: T) => U \| PromiseLike<U>, onFail: ((error: unknown) => U \| PromiseLike<U>) \| U): Promise<U>` | Runs the function and resolves to `onSuccess` or `onFail` (a sync or async function, or a plain value) |
+| `.onFail()` | `(fallback: T \| ((error: unknown) => T \| PromiseLike<T>)): Promise<T>` | Resolves to the value on success, or the fallback (a value, a factory or a sync or async error handler) on failure |
+| `.onFailAsync()` | `<L, R>(fn: (error: unknown) => PromiseLike<Either<L, R>>): EitherAsync<L, R>` | When `T` is `Either<L, R>`: recovers with an async handler and returns a chainable `EitherAsync` |
+| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): PromiseLike<T>` | Resolves to the value on success, or calls the async handler on failure |
+| `.toEither()` | `(): EitherAsync<unknown, T>` | `right(value)` on success, `left(error)` on failure; rejects if that value or error is `null`/`undefined` |
+| `.then()` | `PromiseLike.then` | Allows `await` interop — runs the function and resolves to an already evaluated `Try<T>` |
 
 ### `Validate<L, R>`
 

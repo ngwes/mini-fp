@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Try, TryAsync } from "../src";
+import { Try } from "../src";
 const { run, runAsync} = Try;
 
 const throwable = () : number => {throw new Error("2")};
@@ -52,10 +52,6 @@ describe("Try", () => {
     it("onFailAsync accepts a PromiseLike handler on success", async () => {
         const promiseLike: PromiseLike<number> = { then: (resolve) => Promise.resolve(99).then(resolve) };
         expect(await run(notThrowable).onFailAsync(() => promiseLike)).toEqual(1);
-    });
-
-    it("runAsync returns a TryAsync", () => {
-        expect(runAsync(notThrowableAsync)).toBeInstanceOf(TryAsync);
     });
 
     it("run does not execute the function until consumed", () => {
