@@ -1,4 +1,6 @@
 import { EitherAsync } from "./EitherAsync.js";
+import { pickGuard } from "../utils/guard.js";
+import type { Guard } from "../utils/guard.js";
 
 export class Either<L, R> {
   private constructor(
@@ -60,6 +62,43 @@ export class Either<L, R> {
     return this.isRight() ? onRight(this.rightValue!) : onLeft(this.leftValue!);
   }
 
+  public onRight(action: (value: R) => void): Either<L, R> {
+    if (this.isRight()) action(this.rightValue as R);
+    return this;
+  }
+
+  public onLeft(action: (value: L) => void): Either<L, R> {
+    if (this.isLeft()) action(this.leftValue as L);
+    return this;
+  }
+
+  public guardMap<U>(otherwise: (value: R) => U, ...guards: Guard<R, U>[]): Either<L, U> {
+    return this.map(value => pickGuard(value, otherwise, guards)(value));
+  }
+
+  public guardBind<U>(
+    otherwise: (value: R) => Either<L, U>,
+    ...guards: Guard<R, Either<L, U>>[]
+  ): Either<L, U>;
+  public guardBind<A, B>(
+    onLeft: (value: L) => Either<A, B>,
+    otherwise: (value: R) => Either<A, B>,
+    ...guards: Guard<R, Either<A, B>>[]
+  ): Either<A, B>;
+  public guardBind<A, B>(
+    first: ((value: R) => Either<A, B>) | ((value: L) => Either<A, B>),
+    second?: ((value: R) => Either<A, B>) | Guard<R, Either<A, B>>,
+    ...rest: Guard<R, Either<A, B>>[]
+  ): Either<A, B> {
+    const hasOnLeft = typeof second === "function";
+    const onLeft = hasOnLeft
+      ? (first as (value: L) => Either<A, B>)
+      : (value: L) => Either.left<A, B>(value as unknown as A);
+    const otherwise = hasOnLeft ? second : (first as (value: R) => Either<A, B>);
+    const guards = hasOnLeft || !second ? rest : [second, ...rest];
+    return this.match(value => pickGuard(value, otherwise, guards)(value), onLeft);
+  }
+
   public async mapAsync<U>(
     fn: (value: R) => Promise<U>,
   ): Promise<Either<L, U>> {
@@ -107,9 +146,9 @@ export class Either<L, R> {
     return EitherAsync.from(Promise.resolve(Either.right<U, R>(this.rightValue as R)));
   }
 
-  public matchAsync<U>(
-    onRight: (value: R) => Promise<U>,
-    onLeft: (value: L) => Promise<U>,
+  public async matchAsync<U>(
+    onRight: (value: R) => U | PromiseLike<U>,
+    onLeft: (value: L) => U | PromiseLike<U>,
   ): Promise<U> {
     return this.isRight() ? onRight(this.rightValue!) : onLeft(this.leftValue!);
   }

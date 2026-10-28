@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Either } from "../src";
 import { ErrorResult } from "./models/Error";
 const { right, left } = Either;
@@ -162,5 +162,91 @@ describe("Either", () => {
         () => "4",
       ),
     ).toEqual("4");
+  });
+
+  it("onRight runs only on right and returns the same either", () => {
+    const action = vi.fn();
+    const either = right<string, number>(3);
+    expect(either.onRight(action)).toBe(either);
+    expect(action).toHaveBeenCalledWith(3);
+
+    const spy = vi.fn();
+    const failed = left<string, number>("e");
+    expect(failed.onRight(spy)).toBe(failed);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("onLeft runs only on left", () => {
+    const action = vi.fn();
+    const failed = left<string, number>("e");
+    expect(failed.onLeft(action)).toBe(failed);
+    expect(action).toHaveBeenCalledWith("e");
+
+    const spy = vi.fn();
+    const either = right<string, number>(3);
+    expect(either.onLeft(spy)).toBe(either);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("guardMap applies the first matching guard", () => {
+    expect(
+      right<string, number>(5)
+        .guardMap((_) => "default", [(x) => x > 3, () => "gt3"], [(x) => x > 1, () => "gt1"])
+        .unwrapRight(),
+    ).toEqual("gt3");
+  });
+
+  it("guardMap applies otherwise when no guard matches", () => {
+    expect(
+      right<string, number>(0)
+        .guardMap((_) => "default", [(x) => x > 3, () => "gt3"], [(x) => x > 1, () => "gt1"])
+        .unwrapRight(),
+    ).toEqual("default");
+  });
+
+  it("guardMap keeps left and evaluates no guard", () => {
+    const when = vi.fn((x: number) => x > 3);
+    const otherwise = vi.fn((_: number) => "default");
+    expect(
+      left<string, number>("e").guardMap(otherwise, [when, () => "gt3"]).unwrapLeft(),
+    ).toEqual("e");
+    expect(when).not.toHaveBeenCalled();
+    expect(otherwise).not.toHaveBeenCalled();
+  });
+
+  it("guardBind applies the first matching guard", () => {
+    expect(
+      right<string, number>(5)
+        .guardBind((_) => right<string, string>("default"), [(x) => x > 3, () => left<string, string>("x")])
+        .unwrapLeft(),
+    ).toEqual("x");
+    expect(
+      right<string, number>(0)
+        .guardBind((_) => right<string, string>("default"), [(x) => x > 3, () => left<string, string>("x")])
+        .unwrapRight(),
+    ).toEqual("default");
+  });
+
+  it("guardBind with onLeft maps the left side", () => {
+    expect(
+      left<string, number>("e")
+        .guardBind(
+          (l) => right<number, string>(String(l.length)),
+          (r) => right(String(r)),
+        )
+        .unwrapRight(),
+    ).toEqual("1");
+
+    const onLeft = vi.fn((l: string) => right<number, string>(String(l.length)));
+    expect(
+      right<string, number>(5)
+        .guardBind(
+          onLeft,
+          (r) => right<number, string>(String(r)),
+          [(x) => x > 3, () => left<number, string>(9)],
+        )
+        .unwrapLeft(),
+    ).toEqual(9);
+    expect(onLeft).not.toHaveBeenCalled();
   });
 });

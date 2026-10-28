@@ -64,6 +64,11 @@ describe("Either", () => {
     ).toEqual(4);
   });
 
+  it("matchAsync accepts sync and async handlers", async () => {
+    expect(await right<string, number>(2).matchAsync((x) => x * 2, async () => 0)).toEqual(4);
+    expect(await left<string, number>("e").matchAsync(async (x) => x, () => 9)).toEqual(9);
+  });
+
   it("maps right<ErrorResult, number> correctly into rightthing else", async () => {
     expect((await
       right<ErrorResult, number>(2)

@@ -407,6 +407,44 @@ const httpStatus = left<string, number>("unauthorized").match(
 // 401
 ```
 
+### Side effects: `onRight` and `onLeft`
+
+`onRight` and `onLeft` run an action on one side and return the same either, so the chain continues unchanged.
+
+```typescript
+parseAge(input)
+  .onRight(age => logger.info(`parsed ${age}`))
+  .onLeft(error => logger.warn(error))
+  .map(age => age + 1);
+```
+
+### Guards: `guardMap` and `guardBind`
+
+A `Guard<R, U>` is a `[when, then]` pair. `guardMap` applies the `then` of the first guard whose `when` holds, or `otherwise` when no guard matches. `guardBind` does the same with functions that return an `Either`. On `left`, no guard is evaluated and the left value is kept.
+
+```typescript
+right<string, number>(5).guardMap(
+  x => "small",
+  [x => x > 3, () => "large"],
+  [x => x > 1, () => "medium"],
+);                                   // right("large")
+
+right<string, number>(5).guardBind(
+  x => right<string, string>("ok"),
+  [x => x > 3, () => left<string, string>("too large")],
+);                                   // left("too large")
+```
+
+`guardBind` also accepts an `onLeft` function as its first argument. It handles the left side, so both sides can move to a new `Either<A, B>`:
+
+```typescript
+left<string, number>("e").guardBind(
+  error => right<number, string>(`recovered from ${error}`),
+  value => right<number, string>(String(value)),
+  [x => x < 0, () => left<number, string>(-1)],
+);                                   // right("recovered from e")
+```
+
 ### Unwrapping
 
 ```typescript
@@ -455,10 +493,10 @@ const fromPromise = await right<string, string>(id).bindAsync(fetchEitherFromSom
 const asyncRight = EitherAsync.right<string, number>(42);   // EitherAsync<string, number>
 const asyncLeft  = EitherAsync.left<string, number>("err"); // EitherAsync<string, number>
 
-// matchAsync
+// matchAsync — handlers may be sync or async
 const response = await result.matchAsync(
   async value => ({ status: 200, data: value }),
-  async error => ({ status: 500, data: error })
+  error => ({ status: 500, data: error })
 );
 ```
 
@@ -1183,11 +1221,15 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.bind()` | `<U>(fn: (v: R) => Either<L, U>): Either<L, U>` | Chains on the right side |
 | `.bindLeft()` | `<U>(fn: (v: L) => Either<U, R>): Either<U, R>` | Chains on the left side |
 | `.match()` | `<U>(onRight, onLeft): U` | Pattern match on `right`/`left` |
+| `.onRight()` | `(action: (v: R) => void): Either<L, R>` | Runs the action on `right`; returns the same either |
+| `.onLeft()` | `(action: (v: L) => void): Either<L, R>` | Runs the action on `left`; returns the same either |
+| `.guardMap()` | `<U>(otherwise: (v: R) => U, ...guards: Guard<R, U>[]): Either<L, U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `left` |
+| `.guardBind()` | `<U>(otherwise: (v: R) => Either<L, U>, ...guards: Guard<R, Either<L, U>>[]): Either<L, U>`<br>`<A, B>(onLeft: (v: L) => Either<A, B>, otherwise: (v: R) => Either<A, B>, ...guards: Guard<R, Either<A, B>>[]): Either<A, B>` | Binds with the first matching guard, else `otherwise`; no guard runs on `left`, which is kept or passed to `onLeft` |
 | `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
 | `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
 | `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
 | `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
-| `.matchAsync()` | `<U>(onRight, onLeft): Promise<U>` | Async pattern match |
+| `.matchAsync()` | `<U>(onRight: (v: R) => U \| PromiseLike<U>, onLeft: (v: L) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 
 ### `OptionAsync<T>`
 
