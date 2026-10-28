@@ -305,7 +305,7 @@ const email = await Option.fromAsync(db.findUser(id))
   .filter(u => u.active)
   .bindAsync(u => Option.fromAsync(db.findProfile(u.id)))
   .map(p => p.email)
-  .orElse("unknown"); // Promise<string>
+  .orElse("unknown"); // string
 
 // bindAsync also accepts a Promise<Option<U>> directly
 const fromPromise = await from(value).bindAsync(fetchOptionFromSomewhere());
@@ -1294,7 +1294,7 @@ const lastPage = await repeatWhileAsync(
 
 ### Resource cleanup: `using` and `usingAsync`
 
-Runs a function with a resource that has a `dispose()` method (the exported `DisposableResource` type) and always disposes it afterwards, even when the function throws or rejects; the error is rethrown. `usingAsync` can also manage two resources, where the second is created from the first; they are disposed in reverse order (second, then first).
+Runs a function with a resource that has a `dispose()` method (the exported `DisposableResource` type) and always disposes it afterwards, even when the function throws or rejects; the error is rethrown. `usingAsync` can also manage two resources, where the second is created from the first; they are disposed in reverse order (second, then first). With sync `using`, a function that returns a Promise gets the resource disposed before the promise settles; use `usingAsync` for async work.
 
 ```typescript
 import { using, usingAsync } from '@ngwes/mini-fp';
