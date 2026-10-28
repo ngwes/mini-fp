@@ -457,37 +457,41 @@ left("oops").unwrapRight(); // throws
 
 ### Async API
 
+`mapAsync`, `mapLeftAsync`, `bindAsync`, `bindLeftAsync`, `guardMapAsync` and `guardBindAsync` return an `EitherAsync<L, R>`. It wraps a `Promise<Either<L, R>>`, has the same methods as `Either` (`map`, `bind`, `mapLeft`, `onRight`, `guardMap`, ...) and can be awaited to get the `Either` back, so a pipeline mixes sync and async steps without any `.then()`. On `left`, the later right-side steps are skipped; if a callback throws, the awaited result rejects.
+
 ```typescript
+import { Either, EitherAsync } from '@ngwes/mini-fp';
+
 // mapAsync / mapLeftAsync
-const result = await right<string, string>("hello")
+const upper = await right<string, string>("hello")
   .mapAsync(async s => s.toUpperCase()); // right("HELLO")
 
-// bindAsync — returns EitherAsync<L, U>, which is chainable and awaitable
+// bindAsync: the function may return a Promise<Either<L, U>> or an EitherAsync<L, U>
 const user = await right<ApiError, string>("user-123")
   .bindAsync(async id => {
     const row = await db.users.findById(id);
     return row ? right(row) : left({ code: "NOT_FOUND", message: "User not found" });
   });
 
-// Chain multiple async steps directly — no .then() unwrapping needed
+// Chain sync and async steps directly — no .then() unwrapping needed
 const result = await right<ApiError, string>("user-123")
-  .bindAsync(async id    => fetchUser(id))
-  .bindAsync(async user  => fetchPermissions(user));
-
-// bindAsync also accepts a function returning EitherAsync directly
-const result2 = await right<ApiError, string>("user-123")
-  .bindAsync(id => EitherAsync.from(fetchUser(id)));
+  .bindAsync(id => fetchUser(id))
+  .bind(requireAdmin)
+  .onLeft(error => logger.warn(error.message))
+  .bindAsync(user => fetchPermissions(user));
 
 // bindLeftAsync — chains on the left (error) side
 const recovered = await left<string, number>("not_found")
-  .bindLeftAsync(async code => fallbackLookup(code));
-
-// bindLeftAsync also accepts a function returning EitherAsync directly
-const recovered2 = await left<string, number>("not_found")
   .bindLeftAsync(code => EitherAsync.from(fallbackLookup(code)));
 
-// Also accepts a Promise<Either<L, U>> directly
+// bindAsync / bindLeftAsync also accept a Promise<Either<L, U>> directly
 const fromPromise = await right<string, string>(id).bindAsync(fetchEitherFromSomewhere());
+
+// guardMapAsync / guardBindAsync: async guards; guardBindAsync also accepts an onLeft first
+const plan = await right<string, number>(seats).guardMapAsync(
+  async n => pricing.standard(n),
+  [n => n > 100, async n => pricing.enterprise(n)],
+);
 
 // EitherAsync.right / EitherAsync.left — create an already-resolved EitherAsync directly
 const asyncRight = EitherAsync.right<string, number>(42);   // EitherAsync<string, number>
@@ -499,6 +503,8 @@ const response = await result.matchAsync(
   error => ({ status: 500, data: error })
 );
 ```
+
+On an `EitherAsync`, `match` and `matchAsync` return a `Promise` of the plain value.
 
 ### Worked example: HTTP request handler pipeline
 
@@ -1225,10 +1231,12 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.onLeft()` | `(action: (v: L) => void): Either<L, R>` | Runs the action on `left`; returns the same either |
 | `.guardMap()` | `<U>(otherwise: (v: R) => U, ...guards: Guard<R, U>[]): Either<L, U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `left` |
 | `.guardBind()` | `<U>(otherwise: (v: R) => Either<L, U>, ...guards: Guard<R, Either<L, U>>[]): Either<L, U>`<br>`<A, B>(onLeft: (v: L) => Either<A, B>, otherwise: (v: R) => Either<A, B>, ...guards: Guard<R, Either<A, B>>[]): Either<A, B>` | Binds with the first matching guard, else `otherwise`; no guard runs on `left`, which is kept or passed to `onLeft` |
-| `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
-| `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
+| `.mapAsync()` | `<U>(fn: (v: R) => PromiseLike<U>): EitherAsync<L, U>` | Async map right; returns chainable `EitherAsync` |
+| `.mapLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<U>): EitherAsync<U, R>` | Async map left; returns chainable `EitherAsync` |
+| `.bindAsync()` | `<U>(fn: (v: R) => PromiseLike<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: PromiseLike<Either<L, U>>): EitherAsync<L, U>` | Async bind right; the function may return an `EitherAsync`; returns chainable `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: PromiseLike<Either<U, R>>): EitherAsync<U, R>` | Async bind left; the function may return an `EitherAsync`; returns chainable `EitherAsync` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: R) => PromiseLike<U>, ...guards: Guard<R, PromiseLike<U>>[]): EitherAsync<L, U>` | Async `guardMap`; returns chainable `EitherAsync` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: R) => PromiseLike<Either<L, U>>, ...guards: Guard<R, PromiseLike<Either<L, U>>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => PromiseLike<Either<A, B>>, otherwise: (v: R) => PromiseLike<Either<A, B>>, ...guards: Guard<R, PromiseLike<Either<A, B>>>[]): EitherAsync<A, B>` | Async `guardBind`; returns chainable `EitherAsync` |
 | `.matchAsync()` | `<U>(onRight: (v: R) => U \| PromiseLike<U>, onLeft: (v: L) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 
 ### `OptionAsync<T>`
@@ -1264,15 +1272,29 @@ Returned by `Option.fromAsync()` and by the `Async` methods of `Option`. Wraps a
 
 ### `EitherAsync<L, R>`
 
-Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<Either<L, R>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and implements `PromiseLike`, so it can be awaited directly or chained further. It mirrors `Either`: each method takes the same parameters and returns an `EitherAsync`, except the terminal methods, which return a `Promise`. On `left`, later right-side callbacks are never called; if a callback throws, the awaited result rejects.
 
 | | Signature | Description |
 |---|---|---|
-| `EitherAsync.from` | `from<L, R>(promise: Promise<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
+| `EitherAsync.from` | `from<L, R>(promise: PromiseLike<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
 | `EitherAsync.right` | `right<L, R>(value: R): EitherAsync<L, R>` | Creates an already-resolved `right` |
 | `EitherAsync.left` | `left<L, R>(value: L): EitherAsync<L, R>` | Creates an already-resolved `left` |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right` |
+| `.map()` | `<U>(fn: (v: R) => U): EitherAsync<L, U>` | Transforms the right value |
+| `.mapLeft()` | `<U>(fn: (v: L) => U): EitherAsync<U, R>` | Transforms the left value |
+| `.bind()` | `<U>(fn: (v: R) => Either<L, U>): EitherAsync<L, U>` | Chains on the right side |
+| `.bindLeft()` | `<U>(fn: (v: L) => Either<U, R>): EitherAsync<U, R>` | Chains on the left side |
+| `.mapAsync()` | `<U>(fn: (v: R) => PromiseLike<U>): EitherAsync<L, U>` | Async map right |
+| `.mapLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<U>): EitherAsync<U, R>` | Async map left |
+| `.bindAsync()` | `<U>(fn: (v: R) => PromiseLike<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: PromiseLike<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left`; the function may return an `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: PromiseLike<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right`; the function may return an `EitherAsync` |
+| `.onRight()` | `(action: (v: R) => void): EitherAsync<L, R>` | Runs the action on `right` |
+| `.onLeft()` | `(action: (v: L) => void): EitherAsync<L, R>` | Runs the action on `left` |
+| `.guardMap()` | `<U>(otherwise: (v: R) => U, ...guards: Guard<R, U>[]): EitherAsync<L, U>` | Maps with the first matching guard, else `otherwise` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: R) => PromiseLike<U>, ...guards: Guard<R, PromiseLike<U>>[]): EitherAsync<L, U>` | Async `guardMap` |
+| `.guardBind()` | `<U>(otherwise: (v: R) => Either<L, U>, ...guards: Guard<R, Either<L, U>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => Either<A, B>, otherwise: (v: R) => Either<A, B>, ...guards: Guard<R, Either<A, B>>[]): EitherAsync<A, B>` | Binds with the first matching guard, else `otherwise`; the left is kept or passed to `onLeft` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: R) => PromiseLike<Either<L, U>>, ...guards: Guard<R, PromiseLike<Either<L, U>>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => PromiseLike<Either<A, B>>, otherwise: (v: R) => PromiseLike<Either<A, B>>, ...guards: Guard<R, PromiseLike<Either<A, B>>>[]): EitherAsync<A, B>` | Async `guardBind` |
+| `.match()` | `<U>(onRight: (v: R) => U, onLeft: (v: L) => U): Promise<U>` | Pattern match on `right`/`left` |
+| `.matchAsync()` | `<U>(onRight: (v: R) => U \| PromiseLike<U>, onLeft: (v: L) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 | `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `Try<T>`
