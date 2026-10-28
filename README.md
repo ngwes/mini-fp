@@ -590,7 +590,7 @@ config.onFail(defaultConfig); // reuses the value if the first call succeeded
 
 ### Transforming: `map` and `bind`
 
-`map` transforms the success value. `bind` chains a function that returns another `Try`. Both are lazy, and a throw inside the function becomes a failure. On a failure the function is not called. The result is memoized, so its source runs once even if you consume the result several times.
+`map` transforms the success value. `bind` chains a function that returns another `Try`. Both are lazy, and a throw inside the function becomes a failure. On a failure the function is not called. The result is memoized like `memo()`: once it succeeds, its source is not run again, however many times you consume it. A failing source runs again on each consumption.
 
 ```typescript
 Try.run(() => "42").map(s => Number(s)).onFail(0);           // 42
@@ -647,6 +647,12 @@ const data = await TryAsync.runAsync(() => fetchRemote())
 Try.run(() => 42).toEither();                         // right(42)
 Try.run(() => JSON.parse("{")).toEither()
   .mapLeft(e => (e as Error).name);                    // left("SyntaxError")
+```
+
+An `Either` cannot hold `null` or `undefined`, so `toEither` throws when the success value or the thrown value is `null`/`undefined`. For a side-effect `Try` (such as `Try<void>`), map it to a value first:
+
+```typescript
+Try.run(() => saveUser(user)).map(() => Unit.default).toEither(); // right(Unit.default)
 ```
 
 ### Worked example: safe JSON parsing
@@ -1359,7 +1365,7 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `.match()` | `<U>(onSuccess: (value: T) => U, onFail: ((error: unknown) => U) \| U): U` | Runs the function and calls `onSuccess` or `onFail` (a function or a plain value) |
 | `.onFail()` | `(fallback: T \| ((error: unknown) => T)): T` | Returns the value on success, or the fallback (a value, a factory or an error handler) on failure |
 | `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Async failure handler — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
-| `.toEither()` | `(): Either<unknown, T>` | `right(value)` on success, `left(error)` with the thrown error on failure |
+| `.toEither()` | `(): Either<unknown, T>` | `right(value)` on success, `left(error)` with the thrown error on failure; throws if that value or error is `null`/`undefined` |
 
 ### `TryAsync<T>`
 

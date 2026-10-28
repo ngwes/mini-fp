@@ -147,6 +147,30 @@ describe("Try", () => {
         expect(Try.run(() => JSON.parse("{")).toEither().mapLeft(e => (e as Error).name).unwrapLeft()).toEqual("SyntaxError");
     });
 
+    it("bind is lazy and runs its source once across consumptions", () => {
+        const spy = vi.fn(() => 1);
+        const bound = run(spy).bind(x => run(() => x + 1));
+        expect(spy).not.toHaveBeenCalled();
+        expect(bound.onFail(0)).toEqual(2);
+        expect(bound.isSuccess()).toEqual(true);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("map does not call fn when the source fails", () => {
+        const fn = vi.fn((x: number) => x + 1);
+        expect(run(throwable).map(fn).isFailure()).toEqual(true);
+        expect(fn).not.toHaveBeenCalled();
+    });
+
+    it("toEither throws when the success value is null or undefined", () => {
+        expect(() => Try.run(() => undefined).toEither()).toThrow();
+        expect(() => Try.run(() => null).toEither()).toThrow();
+    });
+
+    it("toEither throws when the thrown value is null", () => {
+        expect(() => Try.run(() => { throw null; }).toEither()).toThrow();
+    });
+
     it("throwing null is a failure", () => {
         expect(Try.run(() => { throw null; }).isFailure()).toEqual(true);
         expect(Try.run(() => { throw undefined; }).isFailure()).toEqual(true);
