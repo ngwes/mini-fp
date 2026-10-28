@@ -35,9 +35,8 @@ export class OptionAsync<T> implements PromiseLike<Option<T>> {
     bindAsync<U>(
         fnOrPromise: ((value: T) => PromiseLike<Option<U>>) | PromiseLike<Option<U>>,
     ): OptionAsync<U> {
-        return OptionAsync.from(this.promise.then(o =>
-            typeof fnOrPromise === "function" ? o.bindAsync(fnOrPromise) : o.bindAsync(fnOrPromise),
-        ));
+        const fn = typeof fnOrPromise === "function" ? fnOrPromise : () => fnOrPromise;
+        return OptionAsync.from(this.promise.then(o => o.bindAsync(fn)));
     }
 
     filter(predicate: (value: T) => boolean): OptionAsync<T> {
