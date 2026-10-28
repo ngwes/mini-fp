@@ -27,12 +27,19 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Real-World Recipes](#real-world-recipes)
 - [API Reference](#api-reference)
   - [Option\<T\>](#optiont-1)
-  - [OptionAsync\<T\>](#optionasync-t)
   - [Either\<L, R\>](#eitherl-r-1)
+  - [OptionAsync\<T\>](#optionasynct)
   - [EitherAsync\<L, R\>](#eitherasyncl-r)
   - [Try\<T\>](#tryt-1)
   - [TryAsync\<T\>](#tryasynct-1)
   - [Validate\<L, R\>](#validatel-r-1)
+  - [Traversal functions](#traversal-functions)
+  - [Functional helpers](#functional-helpers-1)
+  - [Union\<T1, T2\>](#uniont1-t2-1)
+  - [Unit](#unit-1)
+- [Design notes](#design-notes)
+- [Development](#development)
+- [Thanks](#thanks)
 
 ---
 
@@ -62,15 +69,24 @@ See the [mini-fp-skills README](https://github.com/ngwes/mini-fp-skills#readme) 
 ## Quick Start
 
 ```typescript
-import { Option, Either, Try, Validate, traverseOption } from '@ngwes/mini-fp';
+import { some, none, right, left, valid, invalid } from '@ngwes/mini-fp';
 
-const { some, none, from } = Option;
-const { left, right } = Either;
-const { run } = Try;
-const { valid, invalid } = Validate;
+some(42);                       // Option<number>
+none<number>();                 // Option<number>
+right<string, number>(1);       // Either<string, number>
+left<string, number>("e");      // Either<string, number>
+valid<string, number>(1);       // Validate<string, number>
+invalid<string, number>(["e"]); // Validate<string, number>
 ```
 
-Each type is a plain class with static constructors. You can call static methods directly (`Option.some(42)`) or destructure them for a terser style (`const { some } = Option`).
+Each type is a plain class with static constructors. The most common ones — `some`, `none`, `right`, `left`, `valid` and `invalid` — are also exported as plain functions, as shown above. For the others, call the static methods directly (`Option.from(value)`, `Try.run(fn)`) or destructure them for a terser style:
+
+```typescript
+import { Option, Try } from '@ngwes/mini-fp';
+
+const { from } = Option;
+const { run } = Try;
+```
 
 ---
 
@@ -1737,6 +1753,8 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 
 `DisposableResource` is the exported type `{ dispose(): void }`.
 
+`some`, `none`, `right`, `left`, `valid` and `invalid` are exported as plain functions with the same signatures as `Option.some`, `Option.none`, `Either.right`, `Either.left`, `Validate.valid` and `Validate.invalid`.
+
 ### `Union<T1, T2>`
 
 | | Signature | Description |
@@ -1770,8 +1788,8 @@ Unit.default; // the singleton Unit value
 
 - **Right-biased Either** — `map` and `bind` operate on the right (success) side by default; `mapLeft`/`bindLeft` let you work on the left side when needed.
 - **Fail-fast vs. error-harvesting** — `Either` and `Option` short-circuit on the first failure; `Validate` accumulates all failures. Choose based on whether you want to stop early or report everything.
-- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `from` and `fromAsync` which are the safe entry points). Once inside a monad, the value is guaranteed non-null.
-- **Async transparency** — every synchronous operation has an `Async` counterpart with the same semantics, so you can mix sync and async pipelines freely.
+- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `Option.from` and `Option.fromAsync`, which are the safe entry points, along with `toOption`, `toEither` and their async versions). Once inside a monad, the value is guaranteed non-null.
+- **Async transparency** — the async wrappers (`OptionAsync`, `EitherAsync`, `TryAsync`) mirror the sync API, with the same method names and semantics, and add `Async` variants that take async callbacks. You can mix sync and async steps in one chain and `await` the result once at the end.
 
 ---
 
