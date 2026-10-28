@@ -70,4 +70,11 @@ describe("TryAsync", () => {
             .bindAsync(x => EitherAsync.right<Error, string>(x.toString()));
         expect(result.isLeft()).toEqual(true);
     });
+
+    it("onFailAsync with a plain handler is typed PromiseLike, matching what it returns", async () => {
+        const result = runAsync(success).onFailAsync(() => Promise.resolve(0));
+        // @ts-expect-error the returned EitherAsync has no catch
+        expect(result.catch).toBeUndefined();
+        expect(await result).toEqual(1);
+    });
 });

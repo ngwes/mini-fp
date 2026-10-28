@@ -15,8 +15,8 @@ export class TryAsync<T> implements PromiseLike<Try<T>> {
   }
 
   onFailAsync<L, R>(handler: (error: unknown) => PromiseLike<Either<L, R>>): EitherAsync<L, R>;
-  onFailAsync(handler: (error: unknown) => PromiseLike<T>): Promise<T>;
-  onFailAsync(handler: (error: unknown) => PromiseLike<any>): Promise<any> | EitherAsync<any, any> {
+  onFailAsync(handler: (error: unknown) => PromiseLike<T>): PromiseLike<T>;
+  onFailAsync(handler: (error: unknown) => PromiseLike<any>): PromiseLike<any> | EitherAsync<any, any> {
     const resultPromise = this.internal.then(result => result.onFailAsync(handler));
     return EitherAsync.from(resultPromise as Promise<Either<any, any>>);
   }
