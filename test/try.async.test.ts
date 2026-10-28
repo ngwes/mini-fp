@@ -150,6 +150,21 @@ describe("TryAsync", () => {
         expect(await t.match(() => "", e => (e as Error).message)).toEqual("in do");
     });
 
+    it("do turns a rejecting async action into a failure", async () => {
+        const t = runAsync(success).do(async () => { throw new Error("in async do"); });
+        expect(await t.match(() => "", e => (e as Error).message)).toEqual("in async do");
+    });
+
+    it("do awaits an async action before delivering the value", async () => {
+        const steps: string[] = [];
+        const t = runAsync(success).do(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            steps.push("action");
+        });
+        steps.push(`value ${await t.onFail(0)}`);
+        expect(steps).toEqual(["action", "value 1"]);
+    });
+
     it("match with sync/async handlers and a plain fail value", async () => {
         expect(await runAsync(success).match(x => x + 1, () => 0)).toEqual(2);
         expect(await runAsync(success).match(async x => x + 1, async () => 0)).toEqual(2);

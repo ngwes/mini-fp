@@ -35,9 +35,9 @@ export class TryAsync<T> implements PromiseLike<Try<T>> {
     )).memo();
   }
 
-  do(action: (value: T) => void): TryAsync<T> {
+  do(action: (value: T) => unknown): TryAsync<T> {
     return new TryAsync<T>(() => this.evaluate().then(outcome =>
-      outcome.ok ? attempt(() => { action(outcome.value); return outcome; }) : outcome,
+      outcome.ok ? attempt(async () => { await action(outcome.value); return outcome; }) : outcome,
     ));
   }
 
