@@ -6,7 +6,12 @@ export class TryAsync<T> implements PromiseLike<Try<T>> {
   private constructor(private readonly internal: Promise<Try<T>>) {}
 
   static runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T> {
-    return new TryAsync(Try.runAsync(fn));
+    return new TryAsync(
+      new Promise<T>(resolve => resolve(fn())).then(
+        value => Try.run(() => value),
+        error => Try.run<T>(() => { throw error; }),
+      ),
+    );
   }
 
   onFailAsync<L, R>(handler: (error: unknown) => PromiseLike<Either<L, R>>): EitherAsync<L, R>;
