@@ -20,6 +20,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Try\<T\>](#tryt)
 - [TryAsync\<T\>](#tryasynct)
 - [Validate\<L, R\>](#validatel-r)
+- [Union\<T1, T2\>](#uniont1-t2)
 - [Unit](#unit)
 - [Traversal Utilities](#traversal-utilities)
 - [Real-World Recipes](#real-world-recipes)
@@ -983,6 +984,56 @@ result.match(
 
 ---
 
+## Union\<T1, T2\>
+
+`Union<T1, T2>` holds exactly one value that is either a `T1` or a `T2`. Unlike `Either`, neither side means success or failure: both cases are equal, and you handle them with `match`. `Union3<T1, T2, T3>` does the same with three cases.
+
+### Constructors
+
+```typescript
+import { Union, Union3 } from '@ngwes/mini-fp';
+
+const byId   = Union.fromT1<number, string>(42);       // Union<number, string>
+const byName = Union.fromT2<number, string>("alice");  // Union<number, string>
+
+const shape = Union3.fromT3<Circle, Square, Triangle>(triangle); // Union3<Circle, Square, Triangle>
+```
+
+The constructors throw if the value is `null` or `undefined`.
+
+### Checking the state
+
+```typescript
+byId.isT1();   // true
+byId.isT2();   // false
+shape.isT3();  // true
+```
+
+### Pattern matching: `match` and `matchAsync`
+
+`match` calls only the handler for the stored case. `matchAsync` returns a `Promise`, and each handler can be sync or async:
+
+```typescript
+const findUser = (key: Union<number, string>): User =>
+  key.match(
+    id   => usersById.get(id)!,
+    name => usersByName.get(name)!
+  );
+
+const area = shape.match(
+  c => Math.PI * c.radius ** 2,
+  s => s.side ** 2,
+  t => (t.base * t.height) / 2
+);
+
+const user = await byName.matchAsync(
+  id   => cache.get(id),
+  async name => fetchUserByName(name)
+);
+```
+
+---
+
 ## Unit
 
 `Unit` represents the absence of a meaningful return value — the functional equivalent of `void`. It avoids polluting your types with `void` in generic contexts.
@@ -1501,6 +1552,19 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `traverseEitherAsync` | `<L, R>(items: Either<L, Promise<R>>[]): Promise<Either<L, R[]>>` | Async version |
 | `sequenceValidate` | `<L, R>(validates: Validate<L, R>[]): Validate<L, R[]>` | Sequences, accumulating all errors |
 | `sequenceValidateAsync` | `<L, R>(validates: Promise<Validate<L, R>[]>): Promise<Validate<L, R[]>>` | Async version |
+
+### `Union<T1, T2>`
+
+| | Signature | Description |
+|---|---|---|
+| `Union.fromT1` | `fromT1<T1, T2>(value: T1): Union<T1, T2>` | Creates the `T1` case; throws if `null`/`undefined` |
+| `Union.fromT2` | `fromT2<T1, T2>(value: T2): Union<T1, T2>` | Creates the `T2` case; throws if `null`/`undefined` |
+| `.isT1()` | `(): boolean` | `true` if it holds a `T1` |
+| `.isT2()` | `(): boolean` | `true` if it holds a `T2` |
+| `.match()` | `<U>(onT1: (v: T1) => U, onT2: (v: T2) => U): U` | Calls the handler for the stored case |
+| `.matchAsync()` | `<U>(onT1: (v: T1) => U \| PromiseLike<U>, onT2: (v: T2) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
+
+`Union3<T1, T2, T3>` has the same API, plus `Union3.fromT3`, `.isT3()` and a third handler `onT3: (v: T3) => …` for `match` and `matchAsync`.
 
 ### `Unit`
 

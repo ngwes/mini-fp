@@ -16,4 +16,6 @@ export * from "./validate/Validate.js";
 export * from "./validate/validate.async.sequence.js";
 export * from "./validate/validate.sequence.js";
 
+export * from "./union/Union.js";
+
 export * from "./unit/Unit.js";
