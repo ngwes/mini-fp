@@ -168,7 +168,8 @@ export class Option<T>{
         fnOrPromise: ((value: T) => PromiseLike<Option<U>>) | PromiseLike<Option<U>>,
     ): OptionAsync<U> {
         if (this.isNone()) return OptionAsync.none<U>();
-        return OptionAsync.from(typeof fnOrPromise === "function" ? fnOrPromise(this.value!) : fnOrPromise);
+        const fn = typeof fnOrPromise === "function" ? fnOrPromise : () => fnOrPromise;
+        return OptionAsync.from((async () => fn(this.value!))());
     }
 
     match<U>(onSome: (value: T) => U,
@@ -209,7 +210,7 @@ export class Option<T>{
     }
 
     bindNoneAsync(fn: () => PromiseLike<Option<T>>) : OptionAsync<T>{
-        return OptionAsync.from(this.isSome()? Promise.resolve(this) : fn());
+        return OptionAsync.from((async () => this.isSome()? this : fn())());
     }
 
     toEither<L>(left: L | (() => L)) : Either<L, T>{

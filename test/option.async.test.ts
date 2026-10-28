@@ -251,4 +251,18 @@ describe("OptionAsync", () => {
     it("rejects when a callback throws", async () => {
         await expect(OptionAsync.some(1).map(() => { throw new Error("boom"); })).rejects.toThrow("boom");
     });
+
+    it("bindAsync rejects when the callback throws synchronously", async () => {
+        await expect(Some(1).bindAsync((): Promise<Option<number>> => { throw new Error("boom"); })).rejects.toThrow("boom");
+    });
+
+    it("bindNoneAsync rejects when the callback throws synchronously", async () => {
+        await expect(none<number>().bindNoneAsync(() => { throw new Error("boom"); })).rejects.toThrow("boom");
+    });
+
+    it("guardBindAsync rejects when a guard throws synchronously", async () => {
+        const otherwise = async (x: number) => Some(x);
+        const when = (_: number): boolean => { throw new Error("boom"); };
+        await expect(Some(1).guardBindAsync(otherwise, [when, otherwise])).rejects.toThrow("boom");
+    });
 });

@@ -471,6 +471,22 @@ describe("Either", () => {
     await expect(right<string, number>(1).mapAsync(async () => { throw new Error("boom"); })).rejects.toThrow("boom");
     await expect(EitherAsync.right<string, number>(1).bindAsync(() => { throw new Error("boom"); })).rejects.toThrow("boom");
   });
+
+  it("bindAsync rejects when the callback throws synchronously", async () => {
+    const fn = (_: number): Promise<Either<string, number>> => { throw new Error("boom"); };
+    await expect(right<string, number>(1).bindAsync(fn)).rejects.toThrow("boom");
+  });
+
+  it("bindLeftAsync rejects when the callback throws synchronously", async () => {
+    const fn = (_: string): Promise<Either<string, number>> => { throw new Error("boom"); };
+    await expect(left<string, number>("e").bindLeftAsync(fn)).rejects.toThrow("boom");
+  });
+
+  it("guardBindAsync rejects when a guard throws synchronously", async () => {
+    const otherwise = async (x: number) => right<string, number>(x);
+    const when = (_: number): boolean => { throw new Error("boom"); };
+    await expect(right<string, number>(1).guardBindAsync(otherwise, [when, otherwise])).rejects.toThrow("boom");
+  });
 });
 
 function thenable<T>(value: T): PromiseLike<T> {

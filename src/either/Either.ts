@@ -107,9 +107,8 @@ export class Either<L, R> {
     fnOrPromise: ((value: R) => PromiseLike<Either<L, U>>) | PromiseLike<Either<L, U>>,
   ): EitherAsync<L, U> {
     if (this.isLeft()) return EitherAsync.left<L, U>(this.leftValue as L);
-    return EitherAsync.from(
-      typeof fnOrPromise === "function" ? fnOrPromise(this.rightValue as R) : fnOrPromise,
-    );
+    const fn = typeof fnOrPromise === "function" ? fnOrPromise : () => fnOrPromise;
+    return EitherAsync.from((async () => fn(this.rightValue as R))());
   }
 
   public bindLeftAsync<U>(fn: (value: L) => PromiseLike<Either<U, R>>): EitherAsync<U, R>;
@@ -118,9 +117,8 @@ export class Either<L, R> {
     fnOrPromise: ((value: L) => PromiseLike<Either<U, R>>) | PromiseLike<Either<U, R>>,
   ): EitherAsync<U, R> {
     if (this.isRight()) return EitherAsync.right<U, R>(this.rightValue as R);
-    return EitherAsync.from(
-      typeof fnOrPromise === "function" ? fnOrPromise(this.leftValue as L) : fnOrPromise,
-    );
+    const fn = typeof fnOrPromise === "function" ? fnOrPromise : () => fnOrPromise;
+    return EitherAsync.from((async () => fn(this.leftValue as L))());
   }
 
   public guardMapAsync<U>(
@@ -144,9 +142,9 @@ export class Either<L, R> {
     second?: ((value: R) => PromiseLike<Either<A, B>>) | Guard<R, PromiseLike<Either<A, B>>>,
     ...rest: Guard<R, PromiseLike<Either<A, B>>>[]
   ): EitherAsync<A, B> {
-    return EitherAsync.from(
-      this.matchGuards(first, second, rest, value => EitherAsync.left<A, B>(value as unknown as A)),
-    );
+    return EitherAsync.from((async () =>
+      this.matchGuards(first, second, rest, value => EitherAsync.left<A, B>(value as unknown as A))
+    )());
   }
 
   public async matchAsync<U>(
