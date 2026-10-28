@@ -186,6 +186,11 @@ describe("Validate", () => {
     expect(v.unwrapInvalid()).toEqual([1, 2]);
   });
 
+  it("mapInvalid passes only the error to the callback", () => {
+    const v = invalid<string, number>(["10", "7"]).mapInvalid(parseInt);
+    expect(v.unwrapInvalid()).toEqual([10, 7]);
+  });
+
   it("mapInvalid keeps valid", () => {
     const fn = vi.fn((e: string) => e.length);
     const v = valid<string, number>(5).mapInvalid(fn);

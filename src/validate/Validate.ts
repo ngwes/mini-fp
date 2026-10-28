@@ -51,7 +51,7 @@ export class Validate<L, R> {
   mapInvalid<U>(fn: (error: L) => U): Validate<U, R> {
     return this.isValid()
       ? Validate.valid<U, R>(this.value!)
-      : Validate.invalid<U, R>(this.errors!.map(fn));
+      : Validate.invalid<U, R>(this.errors!.map(e => fn(e)));
   }
 
   bindInvalid<U>(fn: (errors: L[]) => Validate<U, R>): Validate<U, R> {
