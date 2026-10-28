@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { Either, traverseEitherAsync } from "../src";
+import { describe, expect, it, vi } from "vitest";
+import { Either, EitherAsync, bindAllAsync, traverseEitherAsync } from "../src";
 
 const { right, left } = Either;
 
@@ -64,6 +64,45 @@ describe("traverseEitherAsync", () => {
 
     expect(result.isRight()).toBe(true);
     expect(result.unwrapRight()).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+});
+
+describe("bindAllAsync", () => {
+
+  it("bindAllAsync applies every function to the right value", async () => {
+    const results = await bindAllAsync(Promise.resolve(right<string, number>(2)), [
+      x => Promise.resolve(right<string, number>(x + 1)),
+      x => EitherAsync.right<string, number>(x * 10),
+    ]);
+
+    expect(results.map(r => r.unwrapRight())).toEqual([3, 20]);
+  });
+
+  it("bindAllAsync runs the functions in parallel", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const second = vi.fn((x: number) => Promise.resolve(right<string, number>(x)));
+
+    const pending = bindAllAsync(EitherAsync.right<string, number>(1), [
+      x => gate.then(() => right<string, number>(x)),
+      second,
+    ]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(second).toHaveBeenCalledWith(1);
+    release();
+    expect((await pending).map(r => r.unwrapRight())).toEqual([1, 1]);
+  });
+
+  it("on a left every result is that left", async () => {
+    const fn = vi.fn((x: number) => Promise.resolve(right<string, number>(x)));
+
+    const results = await bindAllAsync(Promise.resolve(left<string, number>("bad")), [fn, fn]);
+
+    expect(results).toHaveLength(2);
+    expect(results.every(r => r.isLeft() && r.unwrapLeft() === "bad")).toBe(true);
+    expect(fn).not.toHaveBeenCalled();
   });
 
 });

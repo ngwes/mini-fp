@@ -26,3 +26,4 @@ export * from "./functional/loops.js";
 export * from "./functional/using.js";
 export * from "./functional/apply.js";
 export * from "./functional/convert.js";
+export * from "./functional/list.js";

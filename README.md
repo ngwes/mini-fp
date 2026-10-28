@@ -1058,6 +1058,17 @@ performSideEffect().match(
 );
 ```
 
+### Promise helpers: `asTask`, `asPromise` and `toUnitAsync`
+
+`asTask` (alias `asPromise`) wraps a value in a resolved promise. `toUnitAsync` waits for a promise and resolves to `Unit.default`, discarding its value.
+
+```typescript
+import { asTask, toUnitAsync } from '@ngwes/mini-fp';
+
+await asTask(5); // 5
+await toUnitAsync(cache.save(user)); // Unit.default
+```
+
 ---
 
 ## Traversal Utilities
@@ -1107,7 +1118,7 @@ const withMissing = await traverseOptionAsync([
 
 ### `traverseEither`
 
-Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered.
+Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered. An optional mapper is applied to every `right` value; it is not called after the first `left`.
 
 ```typescript
 import { Either, traverseEither } from '@ngwes/mini-fp';
@@ -1115,6 +1126,7 @@ const { left, right } = Either;
 
 traverseEither([right(1), right(2), right(3)]); // right([1, 2, 3])
 traverseEither([right(1), left("oops"), right(3)]); // left("oops")
+traverseEither([right(1), right(2)], x => x * 10); // right([10, 20])
 
 // Practical use: parse a batch of inputs
 const parseAll = (inputs: string[]): Either<string, number[]> =>
@@ -1148,6 +1160,20 @@ const withError = await traverseEitherAsync([
   left("fetch failed"),
 ]);
 // left("fetch failed")
+```
+
+### `bindAllAsync`
+
+Awaits an `Either` (a `PromiseLike<Either>`, such as an `EitherAsync`) and passes its `right` value to every async function in parallel, resolving to one result per function. On a `left`, no function is called and every result is that `left`.
+
+```typescript
+import { bindAllAsync } from '@ngwes/mini-fp';
+
+const [orders, invoices] = await bindAllAsync(findCustomer(id), [
+  customer => fetchOrders(customer),   // both run in parallel
+  customer => fetchInvoices(customer),
+]);
+// findCustomer returned left("not found") → [left("not found"), left("not found")]
 ```
 
 ### `sequenceValidate`
@@ -1198,7 +1224,7 @@ const result = await sequenceValidateAsync(
 
 ## Functional Helpers
 
-Small standalone functions for common functional patterns: side effects inside expressions, expression-style branching and loops, resource cleanup, partial application and nullable-to-monad conversion.
+Small standalone functions for common functional patterns: side effects inside expressions, expression-style branching and loops, resource cleanup, partial application, nullable-to-monad conversion and working with arrays of options and eithers.
 
 ### Side effects: `tee`, `teeWhen`, `teeAsync` and `teeWhenAsync`
 
@@ -1296,6 +1322,25 @@ toEither([],  a => a.length, a => a.length === 0, "empty"); // left("empty")
 
 await toOptionAsync(fetchUser(id)).map(u => u.name);
 await toEitherAsync(Promise.resolve(2), "e").map(x => x + 1); // right(3)
+```
+
+### Lists: `filterSome`, `filterRight`, `filterLeft`, `mapSome`, `mapRight`, `mapLeft` and `foldAsync`
+
+`filterSome`, `filterRight` and `filterLeft` pick the `some`, `right` or `left` values out of an array, optionally keeping only those that match a predicate. `mapSome`, `mapRight` and `mapLeft` pick the same values and map them. `foldAsync` folds an array with an async folder, one item at a time and in order; the seed can be a value or a `PromiseLike`.
+
+```typescript
+import { Option, Either, filterSome, filterLeft, mapRight, foldAsync } from '@ngwes/mini-fp';
+const { some, none } = Option;
+const { right, left } = Either;
+
+filterSome([some(1), none(), some(3)]); // [1, 3]
+filterSome([some(1), none(), some(3)], x => x > 1); // [3]
+
+const results = [right(1), left("timeout"), right(3)];
+filterLeft(results); // ["timeout"]
+mapRight(results, x => x * 10); // [10, 30]
+
+const total = await foldAsync(orderIds, 0, async (sum, id) => sum + (await fetchOrder(id)).total);
 ```
 
 ---
@@ -1654,7 +1699,9 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `traverseOption` | `<T>(items: Option<T>[]): Option<T[]>` | Collects all `some` values; returns `none` on first `none` |
 | `traverseOptionAsync` | `<T>(items: Option<Promise<T>>[]): Promise<Option<T[]>>` | Async version |
 | `traverseEither` | `<L, R>(items: Either<L, R>[]): Either<L, R[]>` | Collects all `right` values; returns first `left` |
+| `traverseEither` | `<L, T, U>(items: Either<L, T>[], map: (v: T) => U): Either<L, U[]>` | Same, mapping every `right` value |
 | `traverseEitherAsync` | `<L, R>(items: Either<L, Promise<R>>[]): Promise<Either<L, R[]>>` | Async version |
+| `bindAllAsync` | `<L, T, U>(value: PromiseLike<Either<L, T>>, fns: ((v: T) => PromiseLike<Either<L, U>>)[]): Promise<Either<L, U>[]>` | Runs every function on the `right` value in parallel; on `left`, every result is that `left` |
 | `sequenceValidate` | `<L, R>(validates: Validate<L, R>[]): Validate<L, R[]>` | Sequences, accumulating all errors |
 | `sequenceValidateAsync` | `<L, R>(validates: Promise<Validate<L, R>[]>): Promise<Validate<L, R[]>>` | Async version |
 
@@ -1680,6 +1727,13 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `toEither` | `<L, R>(value: R \| null \| undefined, left: L \| (() => L)): Either<L, R>` | `left` for `null`/`undefined`; a `left` factory is called lazily |
 | `toEither` | `<A, M, L>(value: A \| null \| undefined, map: (v: A) => M, leftWhen: (v: A) => boolean, left: L \| (() => L)): Either<L, M>` | Also `left` when `leftWhen` holds; otherwise maps the value |
 | `toEitherAsync` | Same overloads as `toEither`, with `value: PromiseLike<…>` | Returns an `EitherAsync` |
+| `filterSome` | `<T>(items: Option<T>[], predicate?: (v: T) => boolean): T[]` | The `some` values, optionally filtered |
+| `filterRight` | `<L, R>(items: Either<L, R>[], predicate?: (v: R) => boolean): R[]` | The `right` values, optionally filtered |
+| `filterLeft` | `<L, R>(items: Either<L, R>[], predicate?: (v: L) => boolean): L[]` | The `left` values, optionally filtered |
+| `mapSome` | `<T, U>(items: Option<T>[], fn: (v: T) => U): U[]` | Maps the `some` values |
+| `mapRight` | `<L, R, U>(items: Either<L, R>[], fn: (v: R) => U): U[]` | Maps the `right` values |
+| `mapLeft` | `<L, R, U>(items: Either<L, R>[], fn: (v: L) => U): U[]` | Maps the `left` values |
+| `foldAsync` | `<T, S>(items: T[], state: S \| PromiseLike<S>, folder: (state: S, item: T) => S \| PromiseLike<S>): Promise<S>` | Folds the items one at a time, in order |
 
 `DisposableResource` is the exported type `{ dispose(): void }`.
 
@@ -1702,6 +1756,11 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 import { Unit } from '@ngwes/mini-fp';
 Unit.default; // the singleton Unit value
 ```
+
+| Function | Signature | Description |
+|---|---|---|
+| `asTask` | `<T>(value: T): Promise<T>` | Wraps the value in a resolved promise (alias: `asPromise`) |
+| `toUnitAsync` | `(promise: PromiseLike<unknown>): Promise<Unit>` | Waits for the promise, resolves to `Unit.default` |
 
 ---
 
