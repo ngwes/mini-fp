@@ -19,3 +19,10 @@ export * from "./validate/validate.sequence.js";
 export * from "./union/Union.js";
 
 export * from "./unit/Unit.js";
+
+export * from "./functional/tee.js";
+export * from "./functional/which.js";
+export * from "./functional/loops.js";
+export * from "./functional/using.js";
+export * from "./functional/apply.js";
+export * from "./functional/convert.js";

@@ -23,6 +23,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Union\<T1, T2\>](#uniont1-t2)
 - [Unit](#unit)
 - [Traversal Utilities](#traversal-utilities)
+- [Functional Helpers](#functional-helpers)
 - [Real-World Recipes](#real-world-recipes)
 - [API Reference](#api-reference)
   - [Option\<T\>](#optiont-1)
@@ -1195,6 +1196,110 @@ const result = await sequenceValidateAsync(
 
 ---
 
+## Functional Helpers
+
+Small standalone functions for common functional patterns: side effects inside expressions, expression-style branching and loops, resource cleanup, partial application and nullable-to-monad conversion.
+
+### Side effects: `tee`, `teeWhen`, `teeAsync` and `teeWhenAsync`
+
+`tee` runs an action on a value and returns the value unchanged, so you can log or record something in the middle of an expression. `teeWhen` runs the action only when a predicate holds. The async versions take a `PromiseLike`, wait for the action (sync or async) to finish, then resolve to the original value.
+
+```typescript
+import { tee, teeWhen, teeAsync, teeWhenAsync } from '@ngwes/mini-fp';
+
+const total = tee(computeTotal(cart), t => console.log("total", t));
+const price = teeWhen(quote, q => audit.flag(q), q => q > 10_000);
+
+const user = await teeAsync(fetchUser(id), u => cache.save(u)); // waits for cache.save
+const order = await teeWhenAsync(fetchOrder(id), o => notify(o), o => o.isLate);
+```
+
+### Branching: `which`
+
+An expression version of `if`/`else`. Pass a condition and two branches, or a value followed by a condition and two branches that all receive the value.
+
+```typescript
+import { which } from '@ngwes/mini-fp';
+
+const greeting = which(() => isMorning(), () => "Good morning", () => "Hello");
+
+const label = which(
+  order,
+  o => o.total > 100,
+  o => `Free shipping for ${o.id}`,
+  o => `Shipping fee applies to ${o.id}`,
+);
+```
+
+### Loops: `repeatWhile` and `repeatWhileAsync`
+
+Starts from `init()` and replaces the accumulator with `step(acc)` while `when(acc)` holds, then returns the accumulator. `repeatWhileAsync` accepts an async `init` and `step`. (`while` is a reserved word, hence the name.)
+
+```typescript
+import { repeatWhile, repeatWhileAsync } from '@ngwes/mini-fp';
+
+repeatWhile(() => 1, x => x < 100, x => x * 2); // 128
+
+const lastPage = await repeatWhileAsync(
+  () => fetchPage(1),
+  page => page.hasNext,
+  page => fetchPage(page.number + 1),
+);
+```
+
+### Resource cleanup: `using` and `usingAsync`
+
+Runs a function with a resource that has a `dispose()` method (the exported `DisposableResource` type) and always disposes it afterwards, even when the function throws or rejects; the error is rethrown. `usingAsync` can also manage two resources, where the second is created from the first; they are disposed in reverse order (second, then first).
+
+```typescript
+import { using, usingAsync } from '@ngwes/mini-fp';
+
+const lines = using(openFile("data.csv"), file => file.readLines());
+
+const rows = await usingAsync(
+  await connect(dbUrl),
+  connection => connection.beginTransaction(),
+  (connection, transaction) => transaction.query("SELECT * FROM users"),
+);
+// transaction.dispose(), then connection.dispose()
+```
+
+### Partial application: `apply`
+
+Fixes the first argument of a function and returns a function of the remaining arguments.
+
+```typescript
+import { apply } from '@ngwes/mini-fp';
+
+const subtractFrom10 = apply((a: number, b: number) => a - b, 10);
+subtractFrom10(3); // 7
+
+const log = apply((level: string, message: string) => console.log(`[${level}] ${message}`), "INFO");
+log("started"); // [INFO] started
+```
+
+### Conversions: `toOption`, `toOptionAsync`, `toEither` and `toEitherAsync`
+
+Turn a possibly `null`/`undefined` value into an `Option` or an `Either`. An optional predicate (`noneWhen` / `leftWhen`) also treats some present values as missing. The longer forms take a `map` function too: the predicate is checked on the original value, then the value is mapped. The `left` of `toEither` can be a value or a factory, called only when the result is a `left`. The async versions take a `PromiseLike` and return a chainable `OptionAsync` / `EitherAsync`.
+
+```typescript
+import { toOption, toOptionAsync, toEither, toEitherAsync } from '@ngwes/mini-fp';
+
+toOption(null);                                    // none
+toOption(5, x => x > 3);                           // none
+toOption(" a ", s => s.trim(), s => s === "");     // some("a")
+
+toEither(null, "missing");                         // left("missing")
+toEither(user, () => new NotFoundError(id));       // the factory runs only if user is null/undefined
+toEither([1], a => a.length, a => a.length === 0, "empty"); // right(1)
+toEither([],  a => a.length, a => a.length === 0, "empty"); // left("empty")
+
+await toOptionAsync(fetchUser(id)).map(u => u.name);
+await toEitherAsync(Promise.resolve(2), "e").map(x => x + 1); // right(3)
+```
+
+---
+
 ## Real-World Recipes
 
 ### Recipe 1: Config loading with fallbacks
@@ -1552,6 +1657,31 @@ Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and
 | `traverseEitherAsync` | `<L, R>(items: Either<L, Promise<R>>[]): Promise<Either<L, R[]>>` | Async version |
 | `sequenceValidate` | `<L, R>(validates: Validate<L, R>[]): Validate<L, R[]>` | Sequences, accumulating all errors |
 | `sequenceValidateAsync` | `<L, R>(validates: Promise<Validate<L, R>[]>): Promise<Validate<L, R[]>>` | Async version |
+
+### Functional helpers
+
+| Function | Signature | Description |
+|---|---|---|
+| `tee` | `<T>(value: T, action: (v: T) => void): T` | Runs the action, returns the value |
+| `teeWhen` | `<T>(value: T, action: (v: T) => void, when: (v: T) => boolean): T` | Runs the action only when `when` holds |
+| `teeAsync` | `<T>(value: PromiseLike<T>, action: (v: T) => unknown): Promise<T>` | Awaits the value and the action, resolves to the value |
+| `teeWhenAsync` | `<T>(value: PromiseLike<T>, action: (v: T) => unknown, when: (v: T) => boolean): Promise<T>` | Async version of `teeWhen` |
+| `which` | `<T>(condition: () => boolean, onTrue: () => T, onFalse: () => T): T` | Expression-style `if`/`else` |
+| `which` | `<S, T>(value: S, condition: (v: S) => boolean, onTrue: (v: S) => T, onFalse: (v: S) => T): T` | Same, passing `value` to every callback |
+| `repeatWhile` | `<T>(init: () => T, when: (acc: T) => boolean, step: (acc: T) => T): T` | Steps the accumulator while `when` holds |
+| `repeatWhileAsync` | `<T>(init: () => T \| PromiseLike<T>, when: (acc: T) => boolean, step: (acc: T) => T \| PromiseLike<T>): Promise<T>` | Async version; `init` and `step` may be async |
+| `using` | `<D extends DisposableResource, T>(resource: D, fn: (r: D) => T): T` | Runs `fn`, then always calls `resource.dispose()` |
+| `usingAsync` | `<D extends DisposableResource, T>(resource: D, fn: (r: D) => PromiseLike<T>): Promise<T>` | Async version |
+| `usingAsync` | `<D1 extends DisposableResource, D2 extends DisposableResource, T>(first: D1, createSecond: (first: D1) => D2, fn: (first: D1, second: D2) => PromiseLike<T>): Promise<T>` | Two resources; disposes the second, then the first |
+| `apply` | `<A, Rest extends unknown[], R>(fn: (first: A, ...rest: Rest) => R, first: A): (...rest: Rest) => R` | Fixes the first argument |
+| `toOption` | `<A>(value: A \| null \| undefined, noneWhen?: (v: A) => boolean): Option<A>` | `none` for `null`/`undefined` or when `noneWhen` holds |
+| `toOption` | `<A, M>(value: A \| null \| undefined, map: (v: A) => M, noneWhen: (v: A) => boolean): Option<M>` | Same, then maps the value |
+| `toOptionAsync` | Same overloads as `toOption`, with `value: PromiseLike<A \| null \| undefined>` | Returns an `OptionAsync` |
+| `toEither` | `<L, R>(value: R \| null \| undefined, left: L \| (() => L)): Either<L, R>` | `left` for `null`/`undefined`; a `left` factory is called lazily |
+| `toEither` | `<A, M, L>(value: A \| null \| undefined, map: (v: A) => M, leftWhen: (v: A) => boolean, left: L \| (() => L)): Either<L, M>` | Also `left` when `leftWhen` holds; otherwise maps the value |
+| `toEitherAsync` | Same overloads as `toEither`, with `value: PromiseLike<…>` | Returns an `EitherAsync` |
+
+`DisposableResource` is the exported type `{ dispose(): void }`.
 
 ### `Union<T1, T2>`
 
