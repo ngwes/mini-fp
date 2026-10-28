@@ -1180,16 +1180,19 @@ const withError = await traverseEitherAsync([
 
 ### `bindAllAsync`
 
-Awaits an `Either` (a `PromiseLike<Either>`, such as an `EitherAsync`) and passes its `right` value to every async function in parallel, resolving to one result per function. On a `left`, no function is called and every result is that `left`.
+Awaits an `Either` (a `PromiseLike<Either>`, such as an `EitherAsync`) and passes its `right` value to every async function in parallel, resolving to one result per function. Every function returns the same `Either<L, U>` type. On a `left`, no function is called and every result is that `left`.
 
 ```typescript
 import { bindAllAsync } from '@ngwes/mini-fp';
 
-const [orders, invoices] = await bindAllAsync(findCustomer(id), [
-  customer => fetchOrders(customer),   // both run in parallel
-  customer => fetchInvoices(customer),
+// findCustomer: (id: string) => EitherAsync<string, Customer>
+// each check:   (customer: Customer) => Promise<Either<string, Customer>>
+const checks = await bindAllAsync(findCustomer(id), [
+  customer => checkCredit(customer), // all run in parallel
+  customer => checkAddress(customer),
+  customer => checkSanctions(customer),
 ]);
-// findCustomer returned left("not found") → [left("not found"), left("not found")]
+// findCustomer returned left("not found") → [left("not found"), left("not found"), left("not found")]
 ```
 
 ### `sequenceValidate`
@@ -1349,10 +1352,10 @@ import { Option, Either, filterSome, filterLeft, mapRight, foldAsync } from '@ng
 const { some, none } = Option;
 const { right, left } = Either;
 
-filterSome([some(1), none(), some(3)]); // [1, 3]
-filterSome([some(1), none(), some(3)], x => x > 1); // [3]
+filterSome([some(1), none<number>(), some(3)]); // [1, 3]
+filterSome([some(1), none<number>(), some(3)], x => x > 1); // [3]
 
-const results = [right(1), left("timeout"), right(3)];
+const results: Either<string, number>[] = [right(1), left("timeout"), right(3)];
 filterLeft(results); // ["timeout"]
 mapRight(results, x => x * 10); // [10, 30]
 
@@ -1789,7 +1792,7 @@ Unit.default; // the singleton Unit value
 - **Right-biased Either** — `map` and `bind` operate on the right (success) side by default; `mapLeft`/`bindLeft` let you work on the left side when needed.
 - **Fail-fast vs. error-harvesting** — `Either` and `Option` short-circuit on the first failure; `Validate` accumulates all failures. Choose based on whether you want to stop early or report everything.
 - **No null leakage** — constructors throw on `null`/`undefined` inputs (except `Option.from` and `Option.fromAsync`, which are the safe entry points, along with `toOption`, `toEither` and their async versions). Once inside a monad, the value is guaranteed non-null.
-- **Async transparency** — the async wrappers (`OptionAsync`, `EitherAsync`, `TryAsync`) mirror the sync API, with the same method names and semantics, and add `Async` variants that take async callbacks. You can mix sync and async steps in one chain and `await` the result once at the end.
+- **Async transparency** — `OptionAsync` and `EitherAsync` mirror the chaining API of `Option` and `Either` (`map`, `bind`, `match`, side effects, guards, …) with the same names and semantics, and add `Async` variants that take async callbacks. `TryAsync` offers the chaining and consuming methods (`bind`, `do`, `match`, `onFail`, `onFailAsync`, `toEither`, `memo`). You can mix sync and async steps in one chain and `await` the result once at the end.
 
 ---
 
