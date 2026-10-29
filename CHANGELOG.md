@@ -1,3 +1,42 @@
+# [2.0.0](https://github.com/ngwes/mini-fp/compare/v1.5.1...v2.0.0) (2026-10-29)
+
+
+* feat(either)!: make EitherAsync mirror Either and return it from async methods ([e49c311](https://github.com/ngwes/mini-fp/commit/e49c31159c9ce29c58eb17bb710d045da6f92b3d))
+* feat(option)!: make OptionAsync mirror Option and return it from async methods ([fb3c72c](https://github.com/ngwes/mini-fp/commit/fb3c72cecf4037e05d5abdb9496c274dd0426f06))
+* feat(try)!: make Try lazy and add memo, map, bind, match and toEither ([a22edc4](https://github.com/ngwes/mini-fp/commit/a22edc4860c57d24fe65edf28f4be57f0e70024f))
+* feat(try)!: make TryAsync lazy and add memo, bind, do, match, onFail and toEither ([6cfa82c](https://github.com/ngwes/mini-fp/commit/6cfa82c731927e08801fb3ca9fc8f680b3f48245))
+
+
+### Bug Fixes
+
+* reject instead of throwing in async bind methods ([d4c4d96](https://github.com/ngwes/mini-fp/commit/d4c4d96227687f6bbeccdab236ea053d98cbb82c))
+* **try:** await async actions in TryAsync.do ([34d7a2a](https://github.com/ngwes/mini-fp/commit/34d7a2a5712e89fc9331733e75ffb82eea3c2ee5))
+* **try:** type TryAsync.onFailAsync with a plain handler as PromiseLike ([355e5cf](https://github.com/ngwes/mini-fp/commit/355e5cf07aaa59070f5a521101f3b4483e803054))
+* **validate:** pass only the error to mapInvalid ([f17ffdf](https://github.com/ngwes/mini-fp/commit/f17ffdf8976a74268e0f9fa2974f1ad5979435ef))
+
+
+### Features
+
+* add list helpers, traverseEither mapper, bindAllAsync and toUnitAsync ([e99ef87](https://github.com/ngwes/mini-fp/commit/e99ef87df9e46210097fbe6512ab04fb397659f5))
+* add prelude functions ([550b8a7](https://github.com/ngwes/mini-fp/commit/550b8a70c6f33ac14b8d3b981b3964aef0e404da))
+* **either:** add onRight/onLeft and guards ([7e45e92](https://github.com/ngwes/mini-fp/commit/7e45e92021b050f5ae7b3c5ff9d56b7c30820500))
+* **functional:** add tee, which, repeatWhile, using, apply and toOption/toEither helpers ([cc912b6](https://github.com/ngwes/mini-fp/commit/cc912b66a133c17e962411b41a4da7f3210acdc0))
+* **option:** add filter, onSome/onNone, mapNone/bindNone, toEither and guards ([b9329b4](https://github.com/ngwes/mini-fp/commit/b9329b415685439e7b3712f458a47c6eda60c7e5))
+* **union:** add Union and Union3 ([597c1f7](https://github.com/ngwes/mini-fp/commit/597c1f725aa29ab1f1446eb29f313b8f34c1dba2))
+* **validate:** add match, matchAsync, mapInvalid and bindInvalid ([0df039d](https://github.com/ngwes/mini-fp/commit/0df039d253754d65278efb0da07e02b4340adf9a))
+
+
+### BREAKING CHANGES
+
+* TryAsync.runAsync no longer starts the work immediately; it starts when the
+TryAsync is consumed (awaited, match, onFail, toEither, ...).
+* Try.run no longer runs the function immediately; it runs when the Try is consumed
+(isSuccess, onFail, match, toEither, ...). Try.runAsync now returns TryAsync.
+* Either.mapAsync and Either.mapLeftAsync now return EitherAsync instead of Promise.
+Awaiting still yields an Either, but .catch/.finally are no longer available.
+* Option.mapAsync and Option.fromAsync now return OptionAsync instead of Promise.
+Awaiting still yields an Option, but .catch/.finally are no longer available.
+
 ## [1.5.1](https://github.com/ngwes/mini-fp/compare/v1.5.0...v1.5.1) (2026-10-24)
 
 
