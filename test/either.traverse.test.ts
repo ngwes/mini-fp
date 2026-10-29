@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Either, traverseEither } from "../src";
 
 const { right, left } = Either;
@@ -77,6 +77,24 @@ describe("traverseEither", () => {
 
     expect(result.isRight()).toBe(true);
     expect(result.unwrapRight()).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("traverseEither with a mapper maps every right", () => {
+    const result = traverseEither([right<string, number>(1), right<string, number>(2)], x => x * 10);
+
+    expect(result.isRight()).toBe(true);
+    expect(result.unwrapRight()).toEqual([10, 20]);
+  });
+
+  it("traverseEither with a mapper stops at the first left", () => {
+    const mapper = vi.fn((x: number) => x * 10);
+    const input = [right<string, number>(1), left<string, number>("boom"), right<string, number>(3)];
+
+    const result = traverseEither(input, mapper);
+
+    expect(result.isLeft()).toBe(true);
+    expect(result.unwrapLeft()).toBe("boom");
+    expect(mapper).toHaveBeenCalledTimes(1);
   });
 
 });

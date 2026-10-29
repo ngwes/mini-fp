@@ -48,6 +48,42 @@ export class Validate<L, R> {
       : Validate.invalid<L, U>(this.errors!);
   }
 
+  mapInvalid<U>(fn: (error: L) => U): Validate<U, R> {
+    return this.isValid()
+      ? Validate.valid<U, R>(this.value!)
+      : Validate.invalid<U, R>(this.errors!.map(e => fn(e)));
+  }
+
+  bindInvalid<U>(fn: (errors: L[]) => Validate<U, R>): Validate<U, R> {
+    return this.isValid()
+      ? Validate.valid<U, R>(this.value!)
+      : fn(this.errors!);
+  }
+
+  match<U>(
+    onValid: ((value: R) => U) | U,
+    onInvalid: ((errors: L[]) => U) | U,
+  ): U {
+    if (this.isValid())
+      return typeof onValid === "function"
+        ? (onValid as (value: R) => U)(this.value!)
+        : onValid;
+
+    return typeof onInvalid === "function"
+      ? (onInvalid as (errors: L[]) => U)(this.errors!)
+      : onInvalid;
+  }
+
+  async matchAsync<U>(
+    onValid: ((value: R) => U | PromiseLike<U>) | PromiseLike<U>,
+    onInvalid: ((errors: L[]) => U | PromiseLike<U>) | PromiseLike<U>,
+  ): Promise<U> {
+    if (this.isValid())
+      return typeof onValid === "function" ? onValid(this.value!) : onValid;
+
+    return typeof onInvalid === "function" ? onInvalid(this.errors!) : onInvalid;
+  }
+
   combine(other: Validate<L, R>): Validate<L, R> {
     if (this.isValid() && other.isValid())
       return Validate.valid<L, R>(this.value!);

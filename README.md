@@ -20,17 +20,26 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Try\<T\>](#tryt)
 - [TryAsync\<T\>](#tryasynct)
 - [Validate\<L, R\>](#validatel-r)
+- [Union\<T1, T2\>](#uniont1-t2)
 - [Unit](#unit)
 - [Traversal Utilities](#traversal-utilities)
+- [Functional Helpers](#functional-helpers)
 - [Real-World Recipes](#real-world-recipes)
 - [API Reference](#api-reference)
   - [Option\<T\>](#optiont-1)
-  - [OptionAsync\<T\>](#optionasync-t)
   - [Either\<L, R\>](#eitherl-r-1)
+  - [OptionAsync\<T\>](#optionasynct)
   - [EitherAsync\<L, R\>](#eitherasyncl-r)
   - [Try\<T\>](#tryt-1)
   - [TryAsync\<T\>](#tryasynct-1)
   - [Validate\<L, R\>](#validatel-r-1)
+  - [Traversal functions](#traversal-functions)
+  - [Functional helpers](#functional-helpers-1)
+  - [Union\<T1, T2\>](#uniont1-t2-1)
+  - [Unit](#unit-1)
+- [Design notes](#design-notes)
+- [Development](#development)
+- [Thanks](#thanks)
 
 ---
 
@@ -60,15 +69,24 @@ See the [mini-fp-skills README](https://github.com/ngwes/mini-fp-skills#readme) 
 ## Quick Start
 
 ```typescript
-import { Option, Either, Try, Validate, traverseOption } from '@ngwes/mini-fp';
+import { some, none, right, left, valid, invalid } from '@ngwes/mini-fp';
 
-const { some, none, from } = Option;
-const { left, right } = Either;
-const { run } = Try;
-const { valid, invalid } = Validate;
+some(42);                       // Option<number>
+none<number>();                 // Option<number>
+right<string, number>(1);       // Either<string, number>
+left<string, number>("e");      // Either<string, number>
+valid<string, number>(1);       // Validate<string, number>
+invalid<string, number>(["e"]); // Validate<string, number>
 ```
 
-Each type is a plain class with static constructors. You can call static methods directly (`Option.some(42)`) or destructure them for a terser style (`const { some } = Option`).
+Each type is a plain class with static constructors. The most common ones — `some`, `none`, `right`, `left`, `valid` and `invalid` — are also exported as plain functions, as shown above. For the others, call the static methods directly (`Option.from(value)`, `Try.run(fn)`) or destructure them for a terser style:
+
+```typescript
+import { Option, Try } from '@ngwes/mini-fp';
+
+const { from } = Option;
+const { run } = Try;
+```
 
 ---
 
@@ -97,8 +115,8 @@ const e = from("hello");      // some("hello")
 const h = from(-1, n => n < 0);   // none
 const i = from(5,  n => n < 0);   // some(5)
 
-// FromAsync: awaits a Promise, then applies from
-const f = await Option.FromAsync(fetchUserOrNull(id)); // Promise<Option<User>>
+// fromAsync: awaits a Promise, then applies from; returns a chainable OptionAsync
+const f = await Option.fromAsync(fetchUserOrNull(id)); // Option<User>
 ```
 
 ### Checking the state
@@ -181,6 +199,71 @@ none<string>().orElse(() => computeExpensiveDefault()); // result of factory
 const user = from(sessionUser).orElse(guestUser);
 ```
 
+### Filtering: `filter`
+
+`filter` keeps `some` only when the predicate holds; otherwise it returns `none`.
+
+```typescript
+some(4).filter(x => x > 2);         // some(4)
+some(1).filter(x => x > 2);         // none
+none<number>().filter(() => true);  // none
+```
+
+### Side effects: `onSome` and `onNone`
+
+`onSome` and `onNone` run an action on one branch and return the same option, so the chain continues unchanged.
+
+```typescript
+from(user)
+  .onSome(u => logger.info(`found ${u.name}`))
+  .onNone(() => logger.warn("user not found"))
+  .map(u => u.email);
+```
+
+### Recovering from `none`: `mapNone` and `bindNone`
+
+`mapNone` replaces `none` with a produced value (wrapped with `Option.from`, so a `null`/`undefined` result stays `none`). `bindNone` replaces `none` with a produced `Option`. Both leave `some` untouched and never call the function on `some`.
+
+```typescript
+none<number>().mapNone(() => 7);              // some(7)
+some(1).mapNone(() => 7);                     // some(1)
+
+from(cache.get(key)).bindNone(() => from(db.get(key))); // cache first, then the database
+```
+
+### Converting to Either: `toEither`
+
+`toEither` turns `some` into `right` and `none` into `left`. The left value can be a plain value or a factory, which is called only on `none`.
+
+```typescript
+some(1).toEither("missing");                           // right(1)
+none<number>().toEither("missing");                    // left("missing")
+from(user).toEither(() => new NotFoundError(userId));  // factory runs only on none
+```
+
+### Guards: `guardMap` and `guardBind`
+
+A `Guard<T, U>` is a `[when, then]` pair. `guardMap` applies the `then` of the first guard whose `when` holds, or `otherwise` when no guard matches. `guardBind` does the same with functions that return an `Option`. On `none`, no guard is evaluated.
+
+```typescript
+import type { Guard } from '@ngwes/mini-fp';
+
+const large: Guard<number, string> = [x => x > 3, () => "large"];
+
+some(5).guardMap(
+  x => "small",
+  large,
+  [x => x > 1, () => "medium"],
+);                                   // some("large")
+
+some(0).guardMap(x => "small", [x => x > 3, () => "large"]); // some("small")
+
+some(5).guardBind(
+  x => some("small"),
+  [x => x > 3, () => none<string>()],
+);                                   // none
+```
+
 ### Unwrapping
 
 Only unwrap when you have already confirmed the option is `some`:
@@ -199,33 +282,41 @@ none().unwrap();     // throws Error
 
 ### Async API
 
-Every operation has an `Async` counterpart:
+`fromAsync`, `mapAsync`, `bindAsync`, `mapNoneAsync`, `bindNoneAsync`, `guardMapAsync` and `guardBindAsync` return an `OptionAsync<T>`. It wraps a `Promise<Option<T>>`, has the same methods as `Option` (`map`, `bind`, `filter`, `onSome`, `toEither`, ...) and can be awaited to get the `Option` back, so a pipeline mixes sync and async steps without any `.then()`. On `none`, the later steps are skipped; if a callback throws, the awaited result rejects.
 
 ```typescript
-import { Option } from '@ngwes/mini-fp';
+import { Option, OptionAsync } from '@ngwes/mini-fp';
 
-// FromAsync: wraps a nullable Promise
-const user = await Option.FromAsync(db.findUser(id)); // Promise<Option<User>>
+// fromAsync: wraps a nullable Promise
+const user = await Option.fromAsync(db.findUser(id)); // Option<User>
 
 // mapAsync
 const upper = await from("hello").mapAsync(async s => s.toUpperCase());
 // some("HELLO")
 
-// bindAsync — returns OptionAsync<U>, which is chainable and awaitable
+// bindAsync: the function may return a Promise<Option<U>> or an OptionAsync<U>
 const profile = await from(userId).bindAsync(async id => {
   const row = await db.query("SELECT * FROM profiles WHERE id = ?", [id]);
   return from(row ?? null); // none if not found
 });
 
-// Chain multiple async steps directly — no .then() unwrapping needed
-const result = await from(sessionToken)
-  .bindAsync(async token => from(await auth.validateToken(token)))
-  .bindAsync(async id   => from(await db.users.findById(id)));
+// Chain sync and async steps directly — no .then() unwrapping needed
+const email = await Option.fromAsync(db.findUser(id))
+  .filter(u => u.active)
+  .bindAsync(u => Option.fromAsync(db.findProfile(u.id)))
+  .map(p => p.email)
+  .orElse("unknown"); // string
 
-// Also accepts a Promise<Option<U>> directly
+// bindAsync also accepts a Promise<Option<U>> directly
 const fromPromise = await from(value).bindAsync(fetchOptionFromSomewhere());
 
-// matchAsync
+// mapNoneAsync / bindNoneAsync: recover from none asynchronously
+const cached = await from(cache.get(key)).bindNoneAsync(() => Option.fromAsync(db.get(key)));
+
+// OptionAsync.some / OptionAsync.none: already-resolved wrappers
+const start = OptionAsync.some(42);
+
+// matchAsync — each handler may be sync or async
 const response = await from(user).matchAsync(
   async u  => ({ status: 200, body: u }),
   async () => ({ status: 404, body: "Not found" })
@@ -237,6 +328,8 @@ const config = await from(process.env.API_URL).orElseAsync(async () => {
   return val;
 });
 ```
+
+On an `OptionAsync`, `match`, `matchAsync`, `orElse` and `orElseAsync` return a `Promise` of the plain value, and `toEither` returns an `EitherAsync`.
 
 ### Worked example: safe navigation through nested objects
 
@@ -332,6 +425,44 @@ const httpStatus = left<string, number>("unauthorized").match(
 // 401
 ```
 
+### Side effects: `onRight` and `onLeft`
+
+`onRight` and `onLeft` run an action on one side and return the same either, so the chain continues unchanged.
+
+```typescript
+parseAge(input)
+  .onRight(age => logger.info(`parsed ${age}`))
+  .onLeft(error => logger.warn(error))
+  .map(age => age + 1);
+```
+
+### Guards: `guardMap` and `guardBind`
+
+A `Guard<R, U>` is a `[when, then]` pair. `guardMap` applies the `then` of the first guard whose `when` holds, or `otherwise` when no guard matches. `guardBind` does the same with functions that return an `Either`. On `left`, no guard is evaluated and the left value is kept.
+
+```typescript
+right<string, number>(5).guardMap(
+  x => "small",
+  [x => x > 3, () => "large"],
+  [x => x > 1, () => "medium"],
+);                                   // right("large")
+
+right<string, number>(5).guardBind(
+  x => right<string, string>("ok"),
+  [x => x > 3, () => left<string, string>("too large")],
+);                                   // left("too large")
+```
+
+`guardBind` also accepts an `onLeft` function as its first argument. It handles the left side, so both sides can move to a new `Either<A, B>`:
+
+```typescript
+left<string, number>("e").guardBind(
+  error => right<number, string>(`recovered from ${error}`),
+  value => right<number, string>(String(value)),
+  [x => x < 0, () => left<number, string>(-1)],
+);                                   // right("recovered from e")
+```
+
 ### Unwrapping
 
 ```typescript
@@ -344,48 +475,54 @@ left("oops").unwrapRight(); // throws
 
 ### Async API
 
+`mapAsync`, `mapLeftAsync`, `bindAsync`, `bindLeftAsync`, `guardMapAsync` and `guardBindAsync` return an `EitherAsync<L, R>`. It wraps a `Promise<Either<L, R>>`, has the same methods as `Either` (`map`, `bind`, `mapLeft`, `onRight`, `guardMap`, ...) and can be awaited to get the `Either` back, so a pipeline mixes sync and async steps without any `.then()`. On `left`, the later right-side steps are skipped; if a callback throws, the awaited result rejects.
+
 ```typescript
+import { Either, EitherAsync } from '@ngwes/mini-fp';
+
 // mapAsync / mapLeftAsync
-const result = await right<string, string>("hello")
+const upper = await right<string, string>("hello")
   .mapAsync(async s => s.toUpperCase()); // right("HELLO")
 
-// bindAsync — returns EitherAsync<L, U>, which is chainable and awaitable
+// bindAsync: the function may return a Promise<Either<L, U>> or an EitherAsync<L, U>
 const user = await right<ApiError, string>("user-123")
   .bindAsync(async id => {
     const row = await db.users.findById(id);
     return row ? right(row) : left({ code: "NOT_FOUND", message: "User not found" });
   });
 
-// Chain multiple async steps directly — no .then() unwrapping needed
+// Chain sync and async steps directly — no .then() unwrapping needed
 const result = await right<ApiError, string>("user-123")
-  .bindAsync(async id    => fetchUser(id))
-  .bindAsync(async user  => fetchPermissions(user));
-
-// bindAsync also accepts a function returning EitherAsync directly
-const result2 = await right<ApiError, string>("user-123")
-  .bindAsync(id => EitherAsync.from(fetchUser(id)));
+  .bindAsync(id => fetchUser(id))
+  .bind(requireAdmin)
+  .onLeft(error => logger.warn(error.message))
+  .bindAsync(user => fetchPermissions(user));
 
 // bindLeftAsync — chains on the left (error) side
 const recovered = await left<string, number>("not_found")
-  .bindLeftAsync(async code => fallbackLookup(code));
-
-// bindLeftAsync also accepts a function returning EitherAsync directly
-const recovered2 = await left<string, number>("not_found")
   .bindLeftAsync(code => EitherAsync.from(fallbackLookup(code)));
 
-// Also accepts a Promise<Either<L, U>> directly
+// bindAsync / bindLeftAsync also accept a Promise<Either<L, U>> directly
 const fromPromise = await right<string, string>(id).bindAsync(fetchEitherFromSomewhere());
+
+// guardMapAsync / guardBindAsync: async guards; guardBindAsync also accepts an onLeft first
+const plan = await right<string, number>(seats).guardMapAsync(
+  async n => pricing.standard(n),
+  [n => n > 100, async n => pricing.enterprise(n)],
+);
 
 // EitherAsync.right / EitherAsync.left — create an already-resolved EitherAsync directly
 const asyncRight = EitherAsync.right<string, number>(42);   // EitherAsync<string, number>
 const asyncLeft  = EitherAsync.left<string, number>("err"); // EitherAsync<string, number>
 
-// matchAsync
+// matchAsync — handlers may be sync or async
 const response = await result.matchAsync(
   async value => ({ status: 200, data: value }),
-  async error => ({ status: 500, data: error })
+  error => ({ status: 500, data: error })
 );
 ```
+
+On an `EitherAsync`, `match` and `matchAsync` return a `Promise` of the plain value.
 
 ### Worked example: HTTP request handler pipeline
 
@@ -430,16 +567,20 @@ result.match(
 
 `Try<T>` wraps a computation that might throw an exception. It captures the exception instead of letting it propagate, giving you a controlled way to handle failures — especially when calling third-party code you don't control.
 
+**`Try` is lazy.** `Try.run(fn)` does not call `fn`. Nothing runs until the `Try` is consumed by `match`, `onFail`, `onFailAsync`, `toEither`, `isSuccess` or `isFailure`, and each consumption runs the function again. Call `memo()` when it should run only once.
+
+Any thrown value is a failure, including `throw null` and `throw undefined`.
+
 ### Constructors
 
 ```typescript
 import { Try } from '@ngwes/mini-fp';
 const { run, runAsync } = Try;
 
-// run: executes a synchronous function, catches any throw
+// run: wraps a synchronous function; nothing runs yet
 const result = Try.run(() => JSON.parse(rawInput));
 
-// runAsync: executes an async function, catches any throw or rejection
+// runAsync: wraps an async function, catches any throw or rejection
 // returns TryAsync<T> for fluent error handling
 const asyncResult = await Try.runAsync(() => fetch(url).then(r => r.json()));
 ```
@@ -447,25 +588,66 @@ const asyncResult = await Try.runAsync(() => fetch(url).then(r => r.json()));
 ### Checking the state
 
 ```typescript
-Try.run(() => 42).isSuccess();            // true
+Try.run(() => 42).isSuccess();                    // true
 Try.run(() => { throw new Error() }).isFailure(); // true
+Try.run(() => { throw null }).isFailure();        // true
+```
+
+Both run the function.
+
+### Running once: `memo`
+
+Without `memo`, every consumption calls the function again. `memo()` returns a `Try` that keeps the first **successful** outcome. A failure is not kept: the next consumption calls the function again, so a memoized `Try` retries until it succeeds.
+
+```typescript
+const config = Try.run(() => loadConfig()).memo();
+
+config.isSuccess();           // calls loadConfig
+config.onFail(defaultConfig); // reuses the value if the first call succeeded
+```
+
+### Transforming: `map` and `bind`
+
+`map` transforms the success value. `bind` chains a function that returns another `Try`. Both are lazy, and a throw inside the function becomes a failure. On a failure the function is not called. The result is memoized like `memo()`: once it succeeds, its source is not run again, however many times you consume it. A failing source runs again on each consumption.
+
+```typescript
+Try.run(() => "42").map(s => Number(s)).onFail(0);           // 42
+Try.run(() => "{").map(s => JSON.parse(s)).isFailure();       // true
+
+const parse = (raw: string) => Try.run(() => JSON.parse(raw) as { port: number });
+Try.run(() => readFileSync(path, "utf-8"))
+  .bind(parse)
+  .map(c => c.port)
+  .onFail(8080);
+```
+
+### Pattern matching: `match`
+
+`match` runs the `Try` and calls `onSuccess` with the value or `onFail` with the error. `onFail` can also be a plain value:
+
+```typescript
+Try.run(() => 42).match(n => `got ${n}`, err => `failed: ${err}`); // "got 42"
+Try.run((): number => { throw 1 }).match(n => n, 0);              // 0
 ```
 
 ### Handling failures: `onFail` and `onFailAsync`
 
-`onFail` is the synchronous recovery method. `onFailAsync` is its async counterpart and accepts any `PromiseLike<T>` — including `EitherAsync<L, T>` when `T` is `Either<L, R>`. Both return the success value directly, or call your handler with the error:
+`onFail` returns the success value, or the fallback on failure. The fallback can be a value, a zero-argument factory or a function of the error. A function is only called on failure:
 
 ```typescript
-// Returns 42 on success
-Try.run(() => 42).onFailAsync(_err => 0);  // 42
+Try.run(() => 42).onFail(0);                                  // 42
+Try.run((): number => { throw new Error("oops") }).onFail(0); // 0
+Try.run((): number => { throw new Error("oops") }).onFail(() => computeDefault());
+Try.run((): number => { throw new Error("oops") }).onFail(err => {
+  console.error(err);
+  return -1;
+});                                                           // -1
+```
 
-// Calls the handler on failure
-Try.run(() => { throw new Error("oops") })
-  .onFailAsync(err => {
-    console.error(err);
-    return -1;
-  });
-// -1
+`onFailAsync` is the async counterpart and accepts any `PromiseLike<T>` — including `EitherAsync<L, T>` when `T` is `Either<L, R>`:
+
+```typescript
+await Try.run(() => 42).onFailAsync(async _err => 0); // 42
 
 // Async recovery — use TryAsync.runAsync for a fluent API
 const data = await TryAsync.runAsync(() => fetchRemote())
@@ -475,15 +657,30 @@ const data = await TryAsync.runAsync(() => fetchRemote())
   });
 ```
 
+### Converting to Either: `toEither`
+
+`toEither` runs the `Try` and returns `right(value)` on success or `left(error)` with the thrown error on failure. The left is `unknown`; use `mapLeft` to turn it into a typed error:
+
+```typescript
+Try.run(() => 42).toEither();                         // right(42)
+Try.run(() => JSON.parse("{")).toEither()
+  .mapLeft(e => (e as Error).name);                    // left("SyntaxError")
+```
+
+An `Either` cannot hold `null` or `undefined`, so `toEither` throws when the success value or the thrown value is `null`/`undefined`. For a side-effect `Try` (such as `Try<void>`), map it to a value first:
+
+```typescript
+Try.run(() => saveUser(user)).map(() => Unit.default).toEither(); // right(Unit.default)
+```
+
 ### Worked example: safe JSON parsing
 
 ```typescript
 type Config = { apiUrl: string; timeout: number };
 
-const parseConfig = (raw: string): Config => {
-  return Try.run<Config>(() => JSON.parse(raw))
-    .onFailAsync(_err => ({ apiUrl: "http://localhost", timeout: 5000 }));
-};
+const parseConfig = (raw: string): Config =>
+  Try.run<Config>(() => JSON.parse(raw))
+    .onFail({ apiUrl: "http://localhost", timeout: 5000 });
 
 parseConfig('{"apiUrl":"https://api.example.com","timeout":3000}');
 // { apiUrl: "https://api.example.com", timeout: 3000 }
@@ -497,60 +694,111 @@ parseConfig("not valid json {{");
 ```typescript
 import { Try } from '@ngwes/mini-fp';
 
-const readConfigFile = async (path: string): Promise<string> => {
-  const result = await Try.runAsync(() => fs.promises.readFile(path, "utf-8"));
-  return result.onFailAsync(err => {
-    console.warn(`Could not read ${path}:`, err);
-    return "{}";
-  });
-};
+const readConfigFile = (path: string): Promise<string> =>
+  Try.runAsync(() => fs.promises.readFile(path, "utf-8"))
+    .onFail(async err => {
+      console.warn(`Could not read ${path}:`, err);
+      return "{}";
+    });
 ```
 
 ### Worked example: converting exceptions to Either
 
 ```typescript
 import { Try, Either } from '@ngwes/mini-fp';
-const { left, right } = Either;
 
-const tryToEither = <T>(fn: () => T): Either<Error, T> => {
-  const t = Try.run(fn);
-  return t.isSuccess()
-    ? right(t.onFailAsync(() => null as never))
-    : left(t.onFailAsync(e => e as Error) as unknown as Error);
-};
+const tryToEither = <T>(fn: () => T): Either<Error, T> =>
+  Try.run(fn)
+    .toEither()
+    .mapLeft(e => (e instanceof Error ? e : new Error(String(e))));
 ```
 
 ---
 
 ## TryAsync\<T\>
 
-`TryAsync<T>` is the async counterpart of `Try<T>`. It wraps an async computation that might throw or return a rejected promise, and provides a fluent `.onFailAsync()` method so you can handle the error in a single expression — no `await` + separate `then` needed.
+`TryAsync<T>` is the async counterpart of `Try<T>`. It wraps an async computation that might throw synchronously or return a rejected promise. Both are failures, and so is any other thrown value, including `null` and `undefined`.
+
+**`TryAsync` is lazy.** `TryAsync.runAsync(fn)` does not call `fn`. Nothing runs until the `TryAsync` is consumed by `await`, `match`, `onFail`, `onFailAsync` or `toEither`, and each consumption runs the function again. Call `memo()` when it should run only once.
 
 ### Constructor
 
 ```typescript
 import { TryAsync } from '@ngwes/mini-fp';
 
-const result = TryAsync.runAsync(() => fetch(url).then(r => r.json()));
+const result = TryAsync.runAsync(() => fetch(url).then(r => r.json())); // nothing runs yet
 ```
 
 `Try.runAsync` also returns a `TryAsync<T>`, so both entry points are equivalent.
 
-### Handling failures: `onFailAsync`
+### Running once: `memo`
 
-`.onFailAsync(handler)` returns the success value directly, or calls your async handler with the error:
+`memo()` returns a `TryAsync` that keeps the first **successful** outcome. Consumers that start while the first run is still pending share it. A failure is not kept: the next consumption calls the function again, so a memoized `TryAsync` retries until it succeeds.
+
+```typescript
+const config = TryAsync.runAsync(() => fetchConfig()).memo();
+
+await config.onFail(defaultConfig); // calls fetchConfig
+await config.onFail(defaultConfig); // reuses the value if the first call succeeded
+```
+
+### Chaining: `bind` and `do`
+
+`bind` chains a function that returns another `TryAsync`. It is lazy, a throw inside the function becomes a failure, and on a failure the function is not called. The result is memoized like `memo()`: once it succeeds, its source is not run again.
+
+`do` runs a side effect on the success value and keeps the value unchanged. It is skipped on failure. An async action is awaited before the value is passed on, and a throw or a rejection inside the action becomes a failure.
+
+```typescript
+const user = TryAsync.runAsync(() => fetchSession())
+  .bind(session => TryAsync.runAsync(() => fetchUser(session.userId)))
+  .do(u => console.log("loaded", u.id));
+```
+
+### Pattern matching: `match`
+
+`match` runs the `TryAsync` and resolves to `onSuccess(value)` or `onFail(error)`. Both handlers can be sync or async, and `onFail` can also be a plain value:
+
+```typescript
+await TryAsync.runAsync(() => fetchCount()).match(n => `got ${n}`, err => `failed: ${err}`);
+await TryAsync.runAsync(() => fetchCount()).match(async n => n * 2, 0);
+```
+
+### Handling failures: `onFail` and `onFailAsync`
+
+`onFail` resolves to the success value, or to the fallback on failure. The fallback can be a value, a zero-argument factory, or a sync or async function of the error. A function is only called on failure:
 
 ```typescript
 const data = await TryAsync.runAsync(() => fetchRemote())
-  .onFailAsync(async err => {
+  .onFail(async err => {
     await logError(err);
     return fallbackData;
   });
 ```
 
+`onFailAsync` takes an async handler. When the handler returns a `PromiseLike<Either<L, R>>`, the result is an `EitherAsync<L, R>` you can keep chaining. Otherwise the result is a `PromiseLike<T>` to `await`:
+
+```typescript
+const result = await TryAsync.runAsync(async () => Either.right<Error, number>(1))
+  .onFailAsync(e => asTask(Either.left<Error, number>(e as Error)))
+  .map(n => n * 2); // right(2)
+```
+
+### Converting to Either: `toEither`
+
+`toEither` runs the `TryAsync` and returns an `EitherAsync<unknown, T>`: `right(value)` on success, `left(error)` with the thrown error or rejection reason on failure. Use `mapLeft` to turn the error into a typed one:
+
+```typescript
+const message = await TryAsync.runAsync(() => fetchRemote())
+  .toEither()
+  .mapLeft(e => (e as Error).message)
+  .match(() => "ok", m => m);
+```
+
+Like `Try.toEither` (see [Try\<T\>](#tryt)), it rejects when the success value or the thrown value is `null`/`undefined`, because an `Either` cannot hold them.
+
 ### Awaiting the underlying `Try<T>`
 
-`TryAsync<T>` implements `PromiseLike<Try<T>>`, so you can `await` it to get back a `Try<T>` and inspect or transform it manually:
+`TryAsync<T>` implements `PromiseLike<Try<T>>`, so you can `await` it to run it and get back an already evaluated `Try<T>`:
 
 ```typescript
 const t = await TryAsync.runAsync(() => fetchRemote());
@@ -563,8 +811,8 @@ t.isSuccess(); // true / false
 import { TryAsync } from '@ngwes/mini-fp';
 
 const fetchConfig = (url: string): Promise<Config> =>
-  TryAsync.runAsync(() => fetch(url).then(r => r.json()))
-    .onFailAsync(_err => defaultConfig);
+  TryAsync.runAsync(() => fetch(url).then(r => r.json() as Promise<Config>))
+    .onFail(() => defaultConfig);
 ```
 
 ---
@@ -597,6 +845,41 @@ invalid<string, number>(["err"]).map(x => x * 2);   // still invalid(["err"])
 valid<string, number>(10)
   .bind(n => n > 0 ? valid(n) : invalid(["must be positive"]));
 // valid(10)
+```
+
+### Working with errors: `mapInvalid` and `bindInvalid`
+
+`mapInvalid` transforms each error. `bindInvalid` receives the whole error array and returns a new `Validate`, so it can recover or replace the errors. Both leave a `valid` untouched:
+
+```typescript
+// mapInvalid — transform every error
+invalid<string, number>(["a", "bb"]).mapInvalid(e => e.length).unwrapInvalid(); // [1, 2]
+valid<string, number>(5).mapInvalid(e => e.length);                             // valid(5)
+
+// bindInvalid — recover from the errors, or turn them into new ones
+invalid<string, number>(["missing"]).bindInvalid(_errors => valid(0));          // valid(0)
+invalid<string, number>(["a", "b"])
+  .bindInvalid(errors => invalid([`${errors.length} errors`]));                  // invalid(["2 errors"])
+```
+
+### Pattern matching: `match` and `matchAsync`
+
+`match` calls `onValid` with the value or `onInvalid` with the errors. Either handler can also be a plain value; a function is only called on its own branch:
+
+```typescript
+valid<string, number>(42).match(n => `got ${n}`, errors => errors.join(", ")); // "got 42"
+invalid<string, number>(["required"]).match(n => `got ${n}`, errors => errors.join(", ")); // "required"
+valid<string, number>(42).match("ok", "ko");                                    // "ok"
+```
+
+`matchAsync` returns a `Promise`. Each handler can be a sync or async function, or a `PromiseLike` value:
+
+```typescript
+await valid<string, number>(42).matchAsync(async n => n * 2, Promise.resolve(0)); // 84
+await invalid<string, number>(["e"]).matchAsync(n => n * 2, async errors => {
+  await logErrors(errors);
+  return 0;
+});                                                                              // 0
 ```
 
 ### Combining: `combine` and `combineAsync`
@@ -718,6 +1001,56 @@ result.match(
 
 ---
 
+## Union\<T1, T2\>
+
+`Union<T1, T2>` holds exactly one value that is either a `T1` or a `T2`. Unlike `Either`, neither side means success or failure: both cases are equal, and you handle them with `match`. `Union3<T1, T2, T3>` does the same with three cases.
+
+### Constructors
+
+```typescript
+import { Union, Union3 } from '@ngwes/mini-fp';
+
+const byId   = Union.fromT1<number, string>(42);       // Union<number, string>
+const byName = Union.fromT2<number, string>("alice");  // Union<number, string>
+
+const shape = Union3.fromT3<Circle, Square, Triangle>(triangle); // Union3<Circle, Square, Triangle>
+```
+
+The constructors throw if the value is `null` or `undefined`.
+
+### Checking the state
+
+```typescript
+byId.isT1();   // true
+byId.isT2();   // false
+shape.isT3();  // true
+```
+
+### Pattern matching: `match` and `matchAsync`
+
+`match` calls only the handler for the stored case. `matchAsync` returns a `Promise`, and each handler can be sync or async:
+
+```typescript
+const findUser = (key: Union<number, string>): User =>
+  key.match(
+    id   => usersById.get(id)!,
+    name => usersByName.get(name)!
+  );
+
+const area = shape.match(
+  c => Math.PI * c.radius ** 2,
+  s => s.side ** 2,
+  t => (t.base * t.height) / 2
+);
+
+const user = await byName.matchAsync(
+  id   => cache.get(id),
+  async name => fetchUserByName(name)
+);
+```
+
+---
+
 ## Unit
 
 `Unit` represents the absence of a meaningful return value — the functional equivalent of `void`. It avoids polluting your types with `void` in generic contexts.
@@ -739,6 +1072,17 @@ performSideEffect().match(
   _unit => console.log("done"),
   err   => console.error(err)
 );
+```
+
+### Promise helpers: `asTask`, `asPromise` and `toUnitAsync`
+
+`asTask` (alias `asPromise`) wraps a value in a resolved promise. `toUnitAsync` waits for a promise and resolves to `Unit.default`, discarding its value.
+
+```typescript
+import { asTask, toUnitAsync } from '@ngwes/mini-fp';
+
+await asTask(5); // 5
+await toUnitAsync(cache.save(user)); // Unit.default
 ```
 
 ---
@@ -790,7 +1134,7 @@ const withMissing = await traverseOptionAsync([
 
 ### `traverseEither`
 
-Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered.
+Converts `Either<L, R>[]` → `Either<L, R[]>`. Returns the first `left` encountered. An optional mapper is applied to every `right` value; it is not called after the first `left`.
 
 ```typescript
 import { Either, traverseEither } from '@ngwes/mini-fp';
@@ -798,6 +1142,7 @@ const { left, right } = Either;
 
 traverseEither([right(1), right(2), right(3)]); // right([1, 2, 3])
 traverseEither([right(1), left("oops"), right(3)]); // left("oops")
+traverseEither([right(1), right(2)], x => x * 10); // right([10, 20])
 
 // Practical use: parse a batch of inputs
 const parseAll = (inputs: string[]): Either<string, number[]> =>
@@ -831,6 +1176,23 @@ const withError = await traverseEitherAsync([
   left("fetch failed"),
 ]);
 // left("fetch failed")
+```
+
+### `bindAllAsync`
+
+Awaits an `Either` (a `PromiseLike<Either>`, such as an `EitherAsync`) and passes its `right` value to every async function in parallel, resolving to one result per function. Every function returns the same `Either<L, U>` type. On a `left`, no function is called and every result is that `left`.
+
+```typescript
+import { bindAllAsync } from '@ngwes/mini-fp';
+
+// findCustomer: (id: string) => EitherAsync<string, Customer>
+// each check:   (customer: Customer) => Promise<Either<string, Customer>>
+const checks = await bindAllAsync(findCustomer(id), [
+  customer => checkCredit(customer), // all run in parallel
+  customer => checkAddress(customer),
+  customer => checkSanctions(customer),
+]);
+// findCustomer returned left("not found") → [left("not found"), left("not found"), left("not found")]
 ```
 
 ### `sequenceValidate`
@@ -879,6 +1241,129 @@ const result = await sequenceValidateAsync(
 
 ---
 
+## Functional Helpers
+
+Small standalone functions for common functional patterns: side effects inside expressions, expression-style branching and loops, resource cleanup, partial application, nullable-to-monad conversion and working with arrays of options and eithers.
+
+### Side effects: `tee`, `teeWhen`, `teeAsync` and `teeWhenAsync`
+
+`tee` runs an action on a value and returns the value unchanged, so you can log or record something in the middle of an expression. `teeWhen` runs the action only when a predicate holds. The async versions take a `PromiseLike`, wait for the action (sync or async) to finish, then resolve to the original value.
+
+```typescript
+import { tee, teeWhen, teeAsync, teeWhenAsync } from '@ngwes/mini-fp';
+
+const total = tee(computeTotal(cart), t => console.log("total", t));
+const price = teeWhen(quote, q => audit.flag(q), q => q > 10_000);
+
+const user = await teeAsync(fetchUser(id), u => cache.save(u)); // waits for cache.save
+const order = await teeWhenAsync(fetchOrder(id), o => notify(o), o => o.isLate);
+```
+
+### Branching: `which`
+
+An expression version of `if`/`else`. Pass a condition and two branches, or a value followed by a condition and two branches that all receive the value.
+
+```typescript
+import { which } from '@ngwes/mini-fp';
+
+const greeting = which(() => isMorning(), () => "Good morning", () => "Hello");
+
+const label = which(
+  order,
+  o => o.total > 100,
+  o => `Free shipping for ${o.id}`,
+  o => `Shipping fee applies to ${o.id}`,
+);
+```
+
+### Loops: `repeatWhile` and `repeatWhileAsync`
+
+Starts from `init()` and replaces the accumulator with `step(acc)` while `when(acc)` holds, then returns the accumulator. `repeatWhileAsync` accepts an async `init` and `step`. (`while` is a reserved word, hence the name.)
+
+```typescript
+import { repeatWhile, repeatWhileAsync } from '@ngwes/mini-fp';
+
+repeatWhile(() => 1, x => x < 100, x => x * 2); // 128
+
+const lastPage = await repeatWhileAsync(
+  () => fetchPage(1),
+  page => page.hasNext,
+  page => fetchPage(page.number + 1),
+);
+```
+
+### Resource cleanup: `using` and `usingAsync`
+
+Runs a function with a resource that has a `dispose()` method (the exported `DisposableResource` type) and always disposes it afterwards, even when the function throws or rejects; the error is rethrown. `usingAsync` can also manage two resources, where the second is created from the first; they are disposed in reverse order (second, then first). With sync `using`, a function that returns a Promise gets the resource disposed before the promise settles; use `usingAsync` for async work.
+
+```typescript
+import { using, usingAsync } from '@ngwes/mini-fp';
+
+const lines = using(openFile("data.csv"), file => file.readLines());
+
+const rows = await usingAsync(
+  await connect(dbUrl),
+  connection => connection.beginTransaction(),
+  (connection, transaction) => transaction.query("SELECT * FROM users"),
+);
+// transaction.dispose(), then connection.dispose()
+```
+
+### Partial application: `apply`
+
+Fixes the first argument of a function and returns a function of the remaining arguments.
+
+```typescript
+import { apply } from '@ngwes/mini-fp';
+
+const subtractFrom10 = apply((a: number, b: number) => a - b, 10);
+subtractFrom10(3); // 7
+
+const log = apply((level: string, message: string) => console.log(`[${level}] ${message}`), "INFO");
+log("started"); // [INFO] started
+```
+
+### Conversions: `toOption`, `toOptionAsync`, `toEither` and `toEitherAsync`
+
+Turn a possibly `null`/`undefined` value into an `Option` or an `Either`. An optional predicate (`noneWhen` / `leftWhen`) also treats some present values as missing. The longer forms take a `map` function too: the predicate is checked on the original value, then the value is mapped. The `left` of `toEither` can be a value or a factory, called only when the result is a `left`. The async versions take a `PromiseLike` and return a chainable `OptionAsync` / `EitherAsync`.
+
+```typescript
+import { toOption, toOptionAsync, toEither, toEitherAsync } from '@ngwes/mini-fp';
+
+toOption(null);                                    // none
+toOption(5, x => x > 3);                           // none
+toOption(" a ", s => s.trim(), s => s === "");     // some("a")
+
+toEither(null, "missing");                         // left("missing")
+toEither(user, () => new NotFoundError(id));       // the factory runs only if user is null/undefined
+toEither([1], a => a.length, a => a.length === 0, "empty"); // right(1)
+toEither([],  a => a.length, a => a.length === 0, "empty"); // left("empty")
+
+await toOptionAsync(fetchUser(id)).map(u => u.name);
+await toEitherAsync(Promise.resolve(2), "e").map(x => x + 1); // right(3)
+```
+
+### Lists: `filterSome`, `filterRight`, `filterLeft`, `mapSome`, `mapRight`, `mapLeft` and `foldAsync`
+
+`filterSome`, `filterRight` and `filterLeft` pick the `some`, `right` or `left` values out of an array, optionally keeping only those that match a predicate. `mapSome`, `mapRight` and `mapLeft` pick the same values and map them. `foldAsync` folds an array with an async folder, one item at a time and in order; the seed can be a value or a `PromiseLike`.
+
+```typescript
+import { Option, Either, filterSome, filterLeft, mapRight, foldAsync } from '@ngwes/mini-fp';
+const { some, none } = Option;
+const { right, left } = Either;
+
+filterSome([some(1), none<number>(), some(3)]); // [1, 3]
+filterSome([some(1), none<number>(), some(3)], x => x > 1); // [3]
+
+const results: Either<string, number>[] = [right(1), left("timeout"), right(3)];
+filterLeft(results); // ["timeout"]
+mapRight(results, x => x * 10); // [10, 30]
+
+const total = await foldAsync(orderIds, 0, async (sum, id) => sum + (await fetchOrder(id)).total);
+```
+
+---
+
 ## Real-World Recipes
 
 ### Recipe 1: Config loading with fallbacks
@@ -902,7 +1387,7 @@ const fromEnv = (): Option<AppConfig> => {
 };
 
 const fromFile = async (): Promise<Option<AppConfig>> => {
-  const text = await Option.FromAsync(
+  const text = await Option.fromAsync(
     import("fs/promises").then(fs =>
       fs.readFile("config.json", "utf-8").catch(() => null)
     )
@@ -957,12 +1442,10 @@ const checkNotTaken = async (email: string): Promise<Either<RegistrationError, s
     : right(email);
 };
 
-const hashPassword = (password: string): Either<RegistrationError, string> => {
-  const t = Try.run(() => bcrypt.hashSync(password, 10));
-  return t.isSuccess()
-    ? right(t.onFailAsync(() => ""))
-    : left({ type: "PERSISTENCE", message: "Failed to hash password" });
-};
+const hashPassword = (password: string): Either<RegistrationError, string> =>
+  Try.run(() => bcrypt.hashSync(password, 10))
+    .toEither()
+    .mapLeft((): RegistrationError => ({ type: "PERSISTENCE", message: "Failed to hash password" }));
 
 const register = async (dto: RegisterDto): Promise<Either<RegistrationError, User>> =>
   validateEmail(dto.email)
@@ -1052,8 +1535,8 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
       const prefs = await db.preferences.findByUser(id);
       return Option.from(prefs);
     })
-    .then(opt => opt.mapAsync(async prefs => recommendations.forPreferences(prefs)))
-    .then(opt => opt.orElseAsync(async () => recommendations.trending()));
+    .mapAsync(async prefs => recommendations.forPreferences(prefs))
+    .orElseAsync(async () => recommendations.trending());
 };
 ```
 
@@ -1068,18 +1551,30 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `Option.some` | `some<T>(value: T): Option<T>` | Creates `some`; throws if value is `null`/`undefined` |
 | `Option.none` | `none<T>(): Option<T>` | Creates `none` |
 | `Option.from` | `from<T>(value: T \| null \| undefined): Option<T>`<br>`from<T>(value: T, noneWhen: (v: T) => boolean): Option<T>` | Safe constructor from nullable; or use `noneWhen` to treat a value as absent based on a predicate |
-| `Option.FromAsync` | `FromAsync<T>(value: Promise<T> \| null \| undefined): Promise<Option<T>>` | Safe async constructor |
+| `Option.fromAsync` | `fromAsync<T>(value: PromiseLike<T \| null \| undefined> \| null \| undefined): OptionAsync<T>` | Safe async constructor; returns chainable `OptionAsync` |
 | `.isSome()` | `(): boolean` | `true` if value is present |
 | `.isNone()` | `(): boolean` | `true` if no value |
 | `.unwrap()` | `(): T` | Returns value; throws if `none` |
 | `.map()` | `<U>(fn: (v: T) => U): Option<U>` | Transforms the inner value |
-| `.mapAsync()` | `<U>(fn: (v: T) => Promise<U>): Promise<Option<U>>` | Async map |
+| `.mapAsync()` | `<U>(fn: (v: T) => PromiseLike<U>): OptionAsync<U>` | Async map; returns chainable `OptionAsync` |
 | `.bind()` | `<U>(fn: (v: T) => Option<U>): Option<U>` | Chains `Option`-returning functions |
-| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Async bind; returns chainable `OptionAsync` |
+| `.bindAsync()` | `<U>(fn: (v: T) => PromiseLike<Option<U>>): OptionAsync<U>`<br>`<U>(promise: PromiseLike<Option<U>>): OptionAsync<U>` | Async bind; the function may return an `OptionAsync`; returns chainable `OptionAsync` |
 | `.match()` | `<U>(onSome, onNone): U` | Pattern match on `some`/`none` |
-| `.matchAsync()` | `<U>(onSome, onNone): Promise<U>` | Async pattern match |
+| `.matchAsync()` | `<U>(onSome: (v: T) => U \| PromiseLike<U>, onNone: () => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 | `.orElse()` | `(defaultValue: T \| (() => T)): T` | Returns value or fallback |
-| `.orElseAsync()` | `(defaultValue: Promise<T> \| (() => Promise<T>)): Promise<T>` | Async fallback |
+| `.orElseAsync()` | `(defaultValue: PromiseLike<T> \| (() => PromiseLike<T>)): Promise<T>` | Async fallback |
+| `.filter()` | `(predicate: (v: T) => boolean): Option<T>` | Keeps `some` only when the predicate holds |
+| `.onSome()` | `(action: (v: T) => void): Option<T>` | Runs the action on `some`; returns the same option |
+| `.onNone()` | `(action: () => void): Option<T>` | Runs the action on `none`; returns the same option |
+| `.mapNone()` | `(fn: () => T): Option<T>` | Replaces `none` with `Option.from(fn())` |
+| `.mapNoneAsync()` | `(fn: () => PromiseLike<T>): OptionAsync<T>` | Async `mapNone`; returns chainable `OptionAsync` |
+| `.bindNone()` | `(fn: () => Option<T>): Option<T>` | Replaces `none` with the produced option |
+| `.bindNoneAsync()` | `(fn: () => PromiseLike<Option<T>>): OptionAsync<T>` | Async `bindNone`; returns chainable `OptionAsync` |
+| `.toEither()` | `<L>(left: L \| (() => L)): Either<L, T>` | `some` becomes `right`, `none` becomes `left`; a factory is called only on `none` |
+| `.guardMap()` | `<U>(otherwise: (v: T) => U, ...guards: Guard<T, U>[]): Option<U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `none` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: T) => PromiseLike<U>, ...guards: Guard<T, PromiseLike<U>>[]): OptionAsync<U>` | Async `guardMap`; returns chainable `OptionAsync` |
+| `.guardBind()` | `<U>(otherwise: (v: T) => Option<U>, ...guards: Guard<T, Option<U>>[]): Option<U>` | Binds with the first matching guard, else `otherwise`; no guard runs on `none` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: T) => PromiseLike<Option<U>>, ...guards: Guard<T, PromiseLike<Option<U>>>[]): OptionAsync<U>` | Async `guardBind`; returns chainable `OptionAsync` |
 
 ### `Either<L, R>`
 
@@ -1096,53 +1591,106 @@ const getRecommendations = async (sessionToken: string | null): Promise<string[]
 | `.bind()` | `<U>(fn: (v: R) => Either<L, U>): Either<L, U>` | Chains on the right side |
 | `.bindLeft()` | `<U>(fn: (v: L) => Either<U, R>): Either<U, R>` | Chains on the left side |
 | `.match()` | `<U>(onRight, onLeft): U` | Pattern match on `right`/`left` |
-| `.mapAsync()` | `<U>(fn: (v: R) => Promise<U>): Promise<Either<L, U>>` | Async map right |
-| `.mapLeftAsync()` | `<U>(fn: (v: L) => Promise<U>): Promise<Either<U, R>>` | Async map left |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Async bind right; returns chainable `EitherAsync` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Async bind left; returns chainable `EitherAsync` |
-| `.matchAsync()` | `<U>(onRight, onLeft): Promise<U>` | Async pattern match |
+| `.onRight()` | `(action: (v: R) => void): Either<L, R>` | Runs the action on `right`; returns the same either |
+| `.onLeft()` | `(action: (v: L) => void): Either<L, R>` | Runs the action on `left`; returns the same either |
+| `.guardMap()` | `<U>(otherwise: (v: R) => U, ...guards: Guard<R, U>[]): Either<L, U>` | Maps with the first matching guard, else `otherwise`; no guard runs on `left` |
+| `.guardBind()` | `<U>(otherwise: (v: R) => Either<L, U>, ...guards: Guard<R, Either<L, U>>[]): Either<L, U>`<br>`<A, B>(onLeft: (v: L) => Either<A, B>, otherwise: (v: R) => Either<A, B>, ...guards: Guard<R, Either<A, B>>[]): Either<A, B>` | Binds with the first matching guard, else `otherwise`; no guard runs on `left`, which is kept or passed to `onLeft` |
+| `.mapAsync()` | `<U>(fn: (v: R) => PromiseLike<U>): EitherAsync<L, U>` | Async map right; returns chainable `EitherAsync` |
+| `.mapLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<U>): EitherAsync<U, R>` | Async map left; returns chainable `EitherAsync` |
+| `.bindAsync()` | `<U>(fn: (v: R) => PromiseLike<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: PromiseLike<Either<L, U>>): EitherAsync<L, U>` | Async bind right; the function may return an `EitherAsync`; returns chainable `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: PromiseLike<Either<U, R>>): EitherAsync<U, R>` | Async bind left; the function may return an `EitherAsync`; returns chainable `EitherAsync` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: R) => PromiseLike<U>, ...guards: Guard<R, PromiseLike<U>>[]): EitherAsync<L, U>` | Async `guardMap`; returns chainable `EitherAsync` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: R) => PromiseLike<Either<L, U>>, ...guards: Guard<R, PromiseLike<Either<L, U>>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => PromiseLike<Either<A, B>>, otherwise: (v: R) => PromiseLike<Either<A, B>>, ...guards: Guard<R, PromiseLike<Either<A, B>>>[]): EitherAsync<A, B>` | Async `guardBind`; returns chainable `EitherAsync` |
+| `.matchAsync()` | `<U>(onRight: (v: R) => U \| PromiseLike<U>, onLeft: (v: L) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 
 ### `OptionAsync<T>`
 
-Returned by `Option.bindAsync()`. Wraps a `Promise<Option<T>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+Returned by `Option.fromAsync()` and by the `Async` methods of `Option`. Wraps a `Promise<Option<T>>` and implements `PromiseLike`, so it can be awaited directly or chained further. It mirrors `Option`: each method takes the same parameters and returns an `OptionAsync`, except the terminal methods, which return a `Promise`. On `none`, later callbacks are never called; if a callback throws, the awaited result rejects.
 
 | | Signature | Description |
 |---|---|---|
-| `OptionAsync.from` | `from<T>(promise: Promise<Option<T>>): OptionAsync<T>` | Wraps an existing promise |
-| `.bindAsync()` | `<U>(fn: (v: T) => Promise<Option<U>>): OptionAsync<U>`<br>`<U>(promise: Promise<Option<U>>): OptionAsync<U>` | Chains on `some`; short-circuits on `none` |
+| `OptionAsync.from` | `from<T>(promise: PromiseLike<Option<T>>): OptionAsync<T>` | Wraps an existing promise |
+| `OptionAsync.some` | `some<T>(value: T): OptionAsync<T>` | Creates an already-resolved `some`; throws if value is `null`/`undefined` |
+| `OptionAsync.none` | `none<T>(): OptionAsync<T>` | Creates an already-resolved `none` |
+| `.map()` | `<U>(fn: (v: T) => U): OptionAsync<U>` | Transforms the inner value |
+| `.mapAsync()` | `<U>(fn: (v: T) => PromiseLike<U>): OptionAsync<U>` | Async map |
+| `.bind()` | `<U>(fn: (v: T) => Option<U>): OptionAsync<U>` | Chains `Option`-returning functions |
+| `.bindAsync()` | `<U>(fn: (v: T) => PromiseLike<Option<U>>): OptionAsync<U>`<br>`<U>(promise: PromiseLike<Option<U>>): OptionAsync<U>` | Chains on `some`; short-circuits on `none`; the function may return an `OptionAsync` |
+| `.filter()` | `(predicate: (v: T) => boolean): OptionAsync<T>` | Keeps `some` only when the predicate holds |
+| `.onSome()` | `(action: (v: T) => void): OptionAsync<T>` | Runs the action on `some` |
+| `.onNone()` | `(action: () => void): OptionAsync<T>` | Runs the action on `none` |
+| `.mapNone()` | `(fn: () => T): OptionAsync<T>` | Replaces `none` with `Option.from(fn())` |
+| `.mapNoneAsync()` | `(fn: () => PromiseLike<T>): OptionAsync<T>` | Async `mapNone` |
+| `.bindNone()` | `(fn: () => Option<T>): OptionAsync<T>` | Replaces `none` with the produced option |
+| `.bindNoneAsync()` | `(fn: () => PromiseLike<Option<T>>): OptionAsync<T>` | Async `bindNone` |
+| `.guardMap()` | `<U>(otherwise: (v: T) => U, ...guards: Guard<T, U>[]): OptionAsync<U>` | Maps with the first matching guard, else `otherwise` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: T) => PromiseLike<U>, ...guards: Guard<T, PromiseLike<U>>[]): OptionAsync<U>` | Async `guardMap` |
+| `.guardBind()` | `<U>(otherwise: (v: T) => Option<U>, ...guards: Guard<T, Option<U>>[]): OptionAsync<U>` | Binds with the first matching guard, else `otherwise` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: T) => PromiseLike<Option<U>>, ...guards: Guard<T, PromiseLike<Option<U>>>[]): OptionAsync<U>` | Async `guardBind` |
+| `.toEither()` | `<L>(left: L \| (() => L)): EitherAsync<L, T>` | `some` becomes `right`, `none` becomes `left`; a factory is called only on `none` |
+| `.match()` | `<U>(onSome: (v: T) => U, onNone: () => U): Promise<U>` | Pattern match on `some`/`none` |
+| `.matchAsync()` | `<U>(onSome: (v: T) => U \| PromiseLike<U>, onNone: () => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
+| `.orElse()` | `(defaultValue: T \| (() => T)): Promise<T>` | Resolves to the value or the fallback |
+| `.orElseAsync()` | `(defaultValue: PromiseLike<T> \| (() => PromiseLike<T>)): Promise<T>` | Resolves to the value or the async fallback |
 | `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `EitherAsync<L, R>`
 
-Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<Either<L, R>>` and implements `PromiseLike`, so it can be awaited directly or chained further.
+Returned by the `Async` methods of `Either`. Wraps a `Promise<Either<L, R>>` and implements `PromiseLike`, so it can be awaited directly or chained further. It mirrors `Either`: each method takes the same parameters and returns an `EitherAsync`, except the terminal methods, which return a `Promise`. On `left`, later right-side callbacks are never called; if a callback throws, the awaited result rejects.
 
 | | Signature | Description |
 |---|---|---|
-| `EitherAsync.from` | `from<L, R>(promise: Promise<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
+| `EitherAsync.from` | `from<L, R>(promise: PromiseLike<Either<L, R>>): EitherAsync<L, R>` | Wraps an existing promise |
 | `EitherAsync.right` | `right<L, R>(value: R): EitherAsync<L, R>` | Creates an already-resolved `right` |
 | `EitherAsync.left` | `left<L, R>(value: L): EitherAsync<L, R>` | Creates an already-resolved `left` |
-| `.bindAsync()` | `<U>(fn: (v: R) => Promise<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(fn: (v: R) => EitherAsync<L, U>): EitherAsync<L, U>`<br>`<U>(promise: Promise<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left` |
-| `.bindLeftAsync()` | `<U>(fn: (v: L) => Promise<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(fn: (v: L) => EitherAsync<U, R>): EitherAsync<U, R>`<br>`<U>(promise: Promise<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right` |
+| `.map()` | `<U>(fn: (v: R) => U): EitherAsync<L, U>` | Transforms the right value |
+| `.mapLeft()` | `<U>(fn: (v: L) => U): EitherAsync<U, R>` | Transforms the left value |
+| `.bind()` | `<U>(fn: (v: R) => Either<L, U>): EitherAsync<L, U>` | Chains on the right side |
+| `.bindLeft()` | `<U>(fn: (v: L) => Either<U, R>): EitherAsync<U, R>` | Chains on the left side |
+| `.mapAsync()` | `<U>(fn: (v: R) => PromiseLike<U>): EitherAsync<L, U>` | Async map right |
+| `.mapLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<U>): EitherAsync<U, R>` | Async map left |
+| `.bindAsync()` | `<U>(fn: (v: R) => PromiseLike<Either<L, U>>): EitherAsync<L, U>`<br>`<U>(promise: PromiseLike<Either<L, U>>): EitherAsync<L, U>` | Chains on `right`; short-circuits on `left`; the function may return an `EitherAsync` |
+| `.bindLeftAsync()` | `<U>(fn: (v: L) => PromiseLike<Either<U, R>>): EitherAsync<U, R>`<br>`<U>(promise: PromiseLike<Either<U, R>>): EitherAsync<U, R>` | Chains on `left`; short-circuits on `right`; the function may return an `EitherAsync` |
+| `.onRight()` | `(action: (v: R) => void): EitherAsync<L, R>` | Runs the action on `right` |
+| `.onLeft()` | `(action: (v: L) => void): EitherAsync<L, R>` | Runs the action on `left` |
+| `.guardMap()` | `<U>(otherwise: (v: R) => U, ...guards: Guard<R, U>[]): EitherAsync<L, U>` | Maps with the first matching guard, else `otherwise` |
+| `.guardMapAsync()` | `<U>(otherwise: (v: R) => PromiseLike<U>, ...guards: Guard<R, PromiseLike<U>>[]): EitherAsync<L, U>` | Async `guardMap` |
+| `.guardBind()` | `<U>(otherwise: (v: R) => Either<L, U>, ...guards: Guard<R, Either<L, U>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => Either<A, B>, otherwise: (v: R) => Either<A, B>, ...guards: Guard<R, Either<A, B>>[]): EitherAsync<A, B>` | Binds with the first matching guard, else `otherwise`; the left is kept or passed to `onLeft` |
+| `.guardBindAsync()` | `<U>(otherwise: (v: R) => PromiseLike<Either<L, U>>, ...guards: Guard<R, PromiseLike<Either<L, U>>>[]): EitherAsync<L, U>`<br>`<A, B>(onLeft: (v: L) => PromiseLike<Either<A, B>>, otherwise: (v: R) => PromiseLike<Either<A, B>>, ...guards: Guard<R, PromiseLike<Either<A, B>>>[]): EitherAsync<A, B>` | Async `guardBind` |
+| `.match()` | `<U>(onRight: (v: R) => U, onLeft: (v: L) => U): Promise<U>` | Pattern match on `right`/`left` |
+| `.matchAsync()` | `<U>(onRight: (v: R) => U \| PromiseLike<U>, onLeft: (v: L) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
 | `.then()` | `PromiseLike.then` | Allows `await` and `.then()` interop |
 
 ### `Try<T>`
 
 | | Signature | Description |
 |---|---|---|
-| `Try.run` | `run<T>(fn: () => T): Try<T>` | Runs a sync function, catches exceptions |
-| `Try.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Runs an async function (or any `PromiseLike`), catches exceptions — returns `TryAsync` |
-| `.isSuccess()` | `(): boolean` | `true` if no exception was thrown |
-| `.isFailure()` | `(): boolean` | `true` if an exception was caught |
-| `.onFail()` | `(fn: (error: unknown) => T): T` | Returns the value on success, calls handler on failure |
+| `Try.run` | `run<T>(fn: () => T): Try<T>` | Wraps a sync function lazily; it runs (and exceptions are caught) when the `Try` is consumed |
+| `Try.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Wraps an async function (or any `PromiseLike`) in a lazy `TryAsync` that catches throws and rejections |
+| `.isSuccess()` | `(): boolean` | Runs the function; `true` if nothing was thrown |
+| `.isFailure()` | `(): boolean` | Runs the function; `true` if anything was thrown (including `null`/`undefined`) |
+| `.memo()` | `(): Try<T>` | Keeps the first successful outcome; a failure runs the function again next time |
+| `.map()` | `<U>(fn: (value: T) => U): Try<U>` | Lazily transforms the success value; a throw in `fn` is a failure; memoized |
+| `.bind()` | `<U>(fn: (value: T) => Try<U>): Try<U>` | Lazily chains a `Try`-returning function; skipped on failure; memoized |
+| `.match()` | `<U>(onSuccess: (value: T) => U, onFail: ((error: unknown) => U) \| U): U` | Runs the function and calls `onSuccess` or `onFail` (a function or a plain value) |
+| `.onFail()` | `(fallback: T \| ((error: unknown) => T)): T` | Returns the value on success, or the fallback (a value, a factory or an error handler) on failure |
 | `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Async failure handler — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
+| `.toEither()` | `(): Either<unknown, T>` | `right(value)` on success, `left(error)` with the thrown error on failure; throws if that value or error is `null`/`undefined` |
 
 ### `TryAsync<T>`
 
 | | Signature | Description |
 |---|---|---|
-| `TryAsync.runAsync` | `runAsync<T>(fn: () => Promise<T>): TryAsync<T>` | Runs an async function, catches throws and rejections |
-| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): Promise<T>` | Returns the value on success, calls async handler on failure — accepts any `PromiseLike<T>`, including `EitherAsync<L, T>` when `T` is `Either<L, R>` |
-| `.then()` | `PromiseLike.then` | Allows `await` interop — resolves to `Try<T>` |
+| `TryAsync.runAsync` | `runAsync<T>(fn: () => PromiseLike<T>): TryAsync<T>` | Wraps an async function lazily; it runs (and throws and rejections are caught) when the `TryAsync` is consumed |
+| `.memo()` | `(): TryAsync<T>` | Keeps the first successful outcome; a failure runs the function again next time |
+| `.bind()` | `<U>(fn: (value: T) => TryAsync<U>): TryAsync<U>` | Lazily chains a `TryAsync`-returning function; skipped on failure; memoized |
+| `.do()` | `(action: (value: T) => unknown): TryAsync<T>` | Runs `action` on the success value and keeps the value; an async action is awaited; skipped on failure; a throw or rejection is a failure |
+| `.match()` | `<U>(onSuccess: (value: T) => U \| PromiseLike<U>, onFail: ((error: unknown) => U \| PromiseLike<U>) \| U): Promise<U>` | Runs the function and resolves to `onSuccess` or `onFail` (a sync or async function, or a plain value) |
+| `.onFail()` | `(fallback: T \| ((error: unknown) => T \| PromiseLike<T>)): Promise<T>` | Resolves to the value on success, or the fallback (a value, a factory or a sync or async error handler) on failure |
+| `.onFailAsync()` | `<L, R>(fn: (error: unknown) => PromiseLike<Either<L, R>>): EitherAsync<L, R>` | When `T` is `Either<L, R>`: recovers with an async handler and returns a chainable `EitherAsync` |
+| `.onFailAsync()` | `(fn: (error: unknown) => PromiseLike<T>): PromiseLike<T>` | Resolves to the value on success, or calls the async handler on failure |
+| `.toEither()` | `(): EitherAsync<unknown, T>` | `right(value)` on success, `left(error)` on failure; rejects if that value or error is `null`/`undefined` |
+| `.then()` | `PromiseLike.then` | Allows `await` interop — runs the function and resolves to an already evaluated `Try<T>` |
 
 ### `Validate<L, R>`
 
@@ -1156,6 +1704,10 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 | `.unwrapInvalid()` | `(): L[]` | Returns errors; throws if valid |
 | `.map()` | `<U>(fn: (v: R) => U): Validate<L, U>` | Transforms the valid value |
 | `.bind()` | `<U>(fn: (v: R) => Validate<L, U>): Validate<L, U>` | Chains on valid |
+| `.mapInvalid()` | `<U>(fn: (error: L) => U): Validate<U, R>` | Transforms each error |
+| `.bindInvalid()` | `<U>(fn: (errors: L[]) => Validate<U, R>): Validate<U, R>` | Chains on invalid with the whole error array; can recover |
+| `.match()` | `<U>(onValid: ((v: R) => U) \| U, onInvalid: ((errors: L[]) => U) \| U): U` | Pattern match on valid/invalid; each handler can be a function or a plain value |
+| `.matchAsync()` | `<U>(onValid: ((v: R) => U \| PromiseLike<U>) \| PromiseLike<U>, onInvalid: ((errors: L[]) => U \| PromiseLike<U>) \| PromiseLike<U>): Promise<U>` | Async pattern match; each handler can be a sync or async function, or a `PromiseLike` |
 | `.combine()` | `(other: Validate<L, R>): Validate<L, R>` | Merges two validations, accumulating errors |
 | `.combineAsync()` | `(other: Promise<Validate<L, R>>): Promise<Validate<L, R>>` | Async combine |
 
@@ -1166,9 +1718,58 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 | `traverseOption` | `<T>(items: Option<T>[]): Option<T[]>` | Collects all `some` values; returns `none` on first `none` |
 | `traverseOptionAsync` | `<T>(items: Option<Promise<T>>[]): Promise<Option<T[]>>` | Async version |
 | `traverseEither` | `<L, R>(items: Either<L, R>[]): Either<L, R[]>` | Collects all `right` values; returns first `left` |
+| `traverseEither` | `<L, T, U>(items: Either<L, T>[], map: (v: T) => U): Either<L, U[]>` | Same, mapping every `right` value |
 | `traverseEitherAsync` | `<L, R>(items: Either<L, Promise<R>>[]): Promise<Either<L, R[]>>` | Async version |
+| `bindAllAsync` | `<L, T, U>(value: PromiseLike<Either<L, T>>, fns: ((v: T) => PromiseLike<Either<L, U>>)[]): Promise<Either<L, U>[]>` | Runs every function on the `right` value in parallel; on `left`, every result is that `left` |
 | `sequenceValidate` | `<L, R>(validates: Validate<L, R>[]): Validate<L, R[]>` | Sequences, accumulating all errors |
 | `sequenceValidateAsync` | `<L, R>(validates: Promise<Validate<L, R>[]>): Promise<Validate<L, R[]>>` | Async version |
+
+### Functional helpers
+
+| Function | Signature | Description |
+|---|---|---|
+| `tee` | `<T>(value: T, action: (v: T) => void): T` | Runs the action, returns the value |
+| `teeWhen` | `<T>(value: T, action: (v: T) => void, when: (v: T) => boolean): T` | Runs the action only when `when` holds |
+| `teeAsync` | `<T>(value: PromiseLike<T>, action: (v: T) => unknown): Promise<T>` | Awaits the value and the action, resolves to the value |
+| `teeWhenAsync` | `<T>(value: PromiseLike<T>, action: (v: T) => unknown, when: (v: T) => boolean): Promise<T>` | Async version of `teeWhen` |
+| `which` | `<T>(condition: () => boolean, onTrue: () => T, onFalse: () => T): T` | Expression-style `if`/`else` |
+| `which` | `<S, T>(value: S, condition: (v: S) => boolean, onTrue: (v: S) => T, onFalse: (v: S) => T): T` | Same, passing `value` to every callback |
+| `repeatWhile` | `<T>(init: () => T, when: (acc: T) => boolean, step: (acc: T) => T): T` | Steps the accumulator while `when` holds |
+| `repeatWhileAsync` | `<T>(init: () => T \| PromiseLike<T>, when: (acc: T) => boolean, step: (acc: T) => T \| PromiseLike<T>): Promise<T>` | Async version; `init` and `step` may be async |
+| `using` | `<D extends DisposableResource, T>(resource: D, fn: (r: D) => T): T` | Runs `fn`, then always calls `resource.dispose()` |
+| `usingAsync` | `<D extends DisposableResource, T>(resource: D, fn: (r: D) => PromiseLike<T>): Promise<T>` | Async version |
+| `usingAsync` | `<D1 extends DisposableResource, D2 extends DisposableResource, T>(first: D1, createSecond: (first: D1) => D2, fn: (first: D1, second: D2) => PromiseLike<T>): Promise<T>` | Two resources; disposes the second, then the first |
+| `apply` | `<A, Rest extends unknown[], R>(fn: (first: A, ...rest: Rest) => R, first: A): (...rest: Rest) => R` | Fixes the first argument |
+| `toOption` | `<A>(value: A \| null \| undefined, noneWhen?: (v: A) => boolean): Option<A>` | `none` for `null`/`undefined` or when `noneWhen` holds |
+| `toOption` | `<A, M>(value: A \| null \| undefined, map: (v: A) => M, noneWhen: (v: A) => boolean): Option<M>` | Same, then maps the value |
+| `toOptionAsync` | Same overloads as `toOption`, with `value: PromiseLike<A \| null \| undefined>` | Returns an `OptionAsync` |
+| `toEither` | `<L, R>(value: R \| null \| undefined, left: L \| (() => L)): Either<L, R>` | `left` for `null`/`undefined`; a `left` factory is called lazily |
+| `toEither` | `<A, M, L>(value: A \| null \| undefined, map: (v: A) => M, leftWhen: (v: A) => boolean, left: L \| (() => L)): Either<L, M>` | Also `left` when `leftWhen` holds; otherwise maps the value |
+| `toEitherAsync` | Same overloads as `toEither`, with `value: PromiseLike<…>` | Returns an `EitherAsync` |
+| `filterSome` | `<T>(items: Option<T>[], predicate?: (v: T) => boolean): T[]` | The `some` values, optionally filtered |
+| `filterRight` | `<L, R>(items: Either<L, R>[], predicate?: (v: R) => boolean): R[]` | The `right` values, optionally filtered |
+| `filterLeft` | `<L, R>(items: Either<L, R>[], predicate?: (v: L) => boolean): L[]` | The `left` values, optionally filtered |
+| `mapSome` | `<T, U>(items: Option<T>[], fn: (v: T) => U): U[]` | Maps the `some` values |
+| `mapRight` | `<L, R, U>(items: Either<L, R>[], fn: (v: R) => U): U[]` | Maps the `right` values |
+| `mapLeft` | `<L, R, U>(items: Either<L, R>[], fn: (v: L) => U): U[]` | Maps the `left` values |
+| `foldAsync` | `<T, S>(items: T[], state: S \| PromiseLike<S>, folder: (state: S, item: T) => S \| PromiseLike<S>): Promise<S>` | Folds the items one at a time, in order |
+
+`DisposableResource` is the exported type `{ dispose(): void }`.
+
+`some`, `none`, `right`, `left`, `valid` and `invalid` are exported as plain functions with the same signatures as `Option.some`, `Option.none`, `Either.right`, `Either.left`, `Validate.valid` and `Validate.invalid`.
+
+### `Union<T1, T2>`
+
+| | Signature | Description |
+|---|---|---|
+| `Union.fromT1` | `fromT1<T1, T2>(value: T1): Union<T1, T2>` | Creates the `T1` case; throws if `null`/`undefined` |
+| `Union.fromT2` | `fromT2<T1, T2>(value: T2): Union<T1, T2>` | Creates the `T2` case; throws if `null`/`undefined` |
+| `.isT1()` | `(): boolean` | `true` if it holds a `T1` |
+| `.isT2()` | `(): boolean` | `true` if it holds a `T2` |
+| `.match()` | `<U>(onT1: (v: T1) => U, onT2: (v: T2) => U): U` | Calls the handler for the stored case |
+| `.matchAsync()` | `<U>(onT1: (v: T1) => U \| PromiseLike<U>, onT2: (v: T2) => U \| PromiseLike<U>): Promise<U>` | Async pattern match; handlers may be sync or async |
+
+`Union3<T1, T2, T3>` has the same API, plus `Union3.fromT3`, `.isT3()` and a third handler `onT3: (v: T3) => …` for `match` and `matchAsync`.
 
 ### `Unit`
 
@@ -1176,6 +1777,11 @@ Returned by `Either.bindAsync()` and `Either.bindLeftAsync()`. Wraps a `Promise<
 import { Unit } from '@ngwes/mini-fp';
 Unit.default; // the singleton Unit value
 ```
+
+| Function | Signature | Description |
+|---|---|---|
+| `asTask` | `<T>(value: T): Promise<T>` | Wraps the value in a resolved promise (alias: `asPromise`) |
+| `toUnitAsync` | `(promise: PromiseLike<unknown>): Promise<Unit>` | Waits for the promise, resolves to `Unit.default` |
 
 ---
 
@@ -1185,8 +1791,8 @@ Unit.default; // the singleton Unit value
 
 - **Right-biased Either** — `map` and `bind` operate on the right (success) side by default; `mapLeft`/`bindLeft` let you work on the left side when needed.
 - **Fail-fast vs. error-harvesting** — `Either` and `Option` short-circuit on the first failure; `Validate` accumulates all failures. Choose based on whether you want to stop early or report everything.
-- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `from` and `FromAsync` which are the safe entry points). Once inside a monad, the value is guaranteed non-null.
-- **Async transparency** — every synchronous operation has an `Async` counterpart with the same semantics, so you can mix sync and async pipelines freely.
+- **No null leakage** — constructors throw on `null`/`undefined` inputs (except `Option.from` and `Option.fromAsync`, which are the safe entry points, along with `toOption`, `toEither` and their async versions). Once inside a monad, the value is guaranteed non-null.
+- **Async transparency** — `OptionAsync` and `EitherAsync` mirror the chaining API of `Option` and `Either` (`map`, `bind`, `match`, side effects, guards, …) with the same names and semantics, and add `Async` variants that take async callbacks. `TryAsync` offers the chaining and consuming methods (`bind`, `do`, `match`, `onFail`, `onFailAsync`, `toEither`, `memo`). You can mix sync and async steps in one chain and `await` the result once at the end.
 
 ---
 

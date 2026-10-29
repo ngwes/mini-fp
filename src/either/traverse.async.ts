@@ -14,3 +14,14 @@ export async function traverseEitherAsync<L, R>(
 
   return Either.right<L, R[]>(result);
 }
+
+export async function bindAllAsync<L, T, U>(
+  value: PromiseLike<Either<L, T>>,
+  fns: ((value: T) => PromiseLike<Either<L, U>>)[],
+): Promise<Either<L, U>[]> {
+  const either = await value;
+
+  return either.isRight()
+    ? Promise.all(fns.map(fn => fn(either.unwrapRight())))
+    : fns.map(() => Either.left<L, U>(either.unwrapLeft()));
+}
