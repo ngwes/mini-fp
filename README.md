@@ -40,6 +40,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Design notes](#design-notes)
 - [Development](#development)
 - [Thanks](#thanks)
+- [License](#license)
 
 ---
 
@@ -1818,3 +1819,11 @@ If you're interested in functional programming and Railway-oriented programming,
 [Functional Programming in C#, by Enrico Buonanno](https://www.manning.com/books/functional-programming-in-c-sharp)
 
 [F# for fun and profit](https://fsharpforfunandprofit.com/)
+
+## License
+
+[Apache License 2.0](https://github.com/ngwes/mini-fp/blob/main/LICENSE). Copyright 2026 ngwes.
+
+You may use, modify and redistribute mini-fp for any purpose, commercial included. If you redistribute it, or a work that contains it or is derived from it, you must keep the attribution in its [NOTICE](https://github.com/ngwes/mini-fp/blob/main/NOTICE) file: in a NOTICE file of your own, in your documentation, or wherever your product shows third-party notices, as section 4 of the license requires.
+
+To use mini-fp without that attribution, ask ngwes for a separate license by opening an issue at https://github.com/ngwes/mini-fp/issues.
