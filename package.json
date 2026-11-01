@@ -31,7 +31,7 @@
     "error-handling"
   ],
   "author": "ngwes",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "module",
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
@@ -47,7 +47,9 @@
   },
   "files": [
     "dist/",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=18"
