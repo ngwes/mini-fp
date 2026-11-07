@@ -31,3 +31,6 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Local Claude Code settings and worktrees; never committed
+.claude/
