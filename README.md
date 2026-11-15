@@ -40,6 +40,7 @@ A minimal TypeScript functional programming library inspired by [language-ext](h
 - [Design notes](#design-notes)
 - [Development](#development)
 - [Thanks](#thanks)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
@@ -1819,6 +1820,10 @@ If you're interested in functional programming and Railway-oriented programming,
 [Functional Programming in C#, by Enrico Buonanno](https://www.manning.com/books/functional-programming-in-c-sharp)
 
 [F# for fun and profit](https://fsharpforfunandprofit.com/)
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/ngwes/mini-fp/blob/main/CONTRIBUTING.md): how to report a problem, propose a change and open a pull request.
 
 ## License
 
